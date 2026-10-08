@@ -6,7 +6,8 @@
 #   templates/nav.html    the nav bar shared by every page
 #   templates/index.html  the home page content, written by hand
 #
-# docs/style.css and docs/desktop.png are edited directly, not generated.
+# docs/style.css, docs/desktop.png and docs/fonts/ are edited directly, not
+# generated.
 
 set -eu
 

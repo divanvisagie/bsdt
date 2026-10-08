@@ -4,7 +4,37 @@
  * man/bsdt.1; this file is edited by hand. Look and palette follow
  * divanv.com. */
 
-@import url("https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+/* Ubuntu Mono, served from this site (Latin subset, Ubuntu Font Licence:
+ * fonts/UFL.txt) rather than imported from Google Fonts. An @import there
+ * made loading a chain: this file, then Google's CSS, then the fonts. */
+@font-face {
+  font-family: "Ubuntu Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/UbuntuMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Ubuntu Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/UbuntuMono-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Ubuntu Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/UbuntuMono-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Ubuntu Mono";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/UbuntuMono-BoldItalic.woff2") format("woff2");
+}
 
 :root {
   color-scheme: light dark;
