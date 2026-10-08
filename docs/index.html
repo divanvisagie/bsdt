@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="style.css" type="text/css" media="all"/>
+  <title>BSDT(1)</title>
+</head>
+<body>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">BSDT(1)</td>
+    <td class="head-vol">General Commands Manual</td>
+    <td class="head-rtitle">BSDT(1)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp"><code class="Nm">bsdt</code> &#x2014; <span class="Nd">repeatable
+    FreeBSD development VMs from a TOML file</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<table class="Nm">
+  <tr>
+    <td><code class="Nm">bsdt</code></td>
+    <td>[<code class="Fl">-f</code> <var class="Ar">file</var>]
+      <var class="Ar">command</var> [<var class="Ar">args</var>]</td>
+  </tr>
+</table>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp"><code class="Nm">bsdt</code> boots a FreeBSD virtual machine for
+    the project in the current directory, described by a
+    <span class="Pa">bsdt.toml</span> environment file, much as
+    &#x2018;<code class="Li">docker compose up</code>&#x2019; starts containers
+    from a compose file. It is meant for building and testing software on
+    FreeBSD while working on Linux or macOS.</p>
+<p class="Pp" id="BASIC-CLOUDINIT">The guest is booted with
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=qemu-system-x86_64&amp;sektion=1">qemu-system-x86_64(1)</a>
+    or
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=qemu-system-aarch64&amp;sektion=1">qemu-system-aarch64(1)</a>
+    from the official FreeBSD
+    <a class="permalink" href="#BASIC-CLOUDINIT"><b class="Sy">BASIC-CLOUDINIT</b></a>
+    VM image, which is downloaded once, checked against the release's
+    <span class="Pa">CHECKSUM.SHA256</span> and cached. Each project gets its
+    own copy-on-write overlay disk on top of the cached image, so a VM can be
+    thrown away and recreated in seconds.</p>
+<p class="Pp">On first boot, a small configuration disk is attached that
+    FreeBSD's
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=nuageinit&amp;sektion=7">nuageinit(7)</a>
+    reads to create a &#x2018;<code class="Li">bsdt</code>&#x2019; user and to
+    allow key-based SSH logins as that user and as root.
+    <code class="Nm">bsdt</code> then installs the listed packages, copies the
+    project into the guest with
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=rsync&amp;sektion=1">rsync(1)</a>
+    and runs the provision commands. Later commands reach the guest over SSH on
+    a forwarded port bound to 127.0.0.1.</p>
+<p class="Pp">Hardware acceleration is used when the guest architecture matches
+    the host: KVM on Linux and the Hypervisor framework on macOS. Otherwise QEMU
+    emulates the CPU, which works but is much slower.</p>
+<p class="Pp">NetBSD and OpenBSD guests are planned. They are accepted in the
+    environment file but rejected by <code class="Cm">up</code> for now.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="COMMANDS"><a class="permalink" href="#COMMANDS">COMMANDS</a></h1>
+<dl class="Bl-tag">
+  <dt id="init"><a class="permalink" href="#init"><code class="Cm">init</code></a></dt>
+  <dd>Write a commented starter <span class="Pa">bsdt.toml</span> in the current
+      directory, or to the path given with <code class="Fl">-f</code>.</dd>
+  <dt id="up"><a class="permalink" href="#up"><code class="Cm">up</code></a></dt>
+  <dd>Boot the VM. On first use this downloads the base image if needed, creates
+      the overlay disk, waits for first-boot setup to finish, installs packages,
+      syncs the project and runs the provision commands. On later runs it boots
+      the existing disk and syncs. Does nothing if the VM is already
+    running.</dd>
+  <dt id="down"><a class="permalink" href="#down"><code class="Cm">down</code></a></dt>
+  <dd>Shut the guest down through ACPI, waiting up to a minute before stopping
+      QEMU forcibly. The disk is kept.</dd>
+  <dt id="destroy"><a class="permalink" href="#destroy"><code class="Cm">destroy</code></a></dt>
+  <dd>Stop QEMU immediately and delete the VM's state directory, including its
+      disk. The cached base image is kept.</dd>
+  <dt id="status"><a class="permalink" href="#status"><code class="Cm">status</code></a></dt>
+  <dd>Show the environment file, guest, sync destination, whether the VM is
+      running, and its forwarded ports.</dd>
+  <dt id="ssh"><a class="permalink" href="#ssh"><code class="Cm">ssh</code></a>
+    [<code class="Fl">--root</code>]</dt>
+  <dd>Open a login shell in the guest directory matching the current
+    directory.</dd>
+  <dt id="exec"><a class="permalink" href="#exec"><code class="Cm">exec</code></a>
+    [<code class="Fl">--root</code>] [<code class="Fl">--no-sync</code>]
+    <code class="Fl">--</code> <var class="Ar">command</var>
+    [<var class="Ar">arg ...</var>]</dt>
+  <dd>Sync the project, then run <var class="Ar">command</var> in the guest
+      directory matching the current directory. Each argument is passed through
+      unchanged, so shell syntax needs an explicit &#x2018;<code class="Li">sh
+      -c</code>&#x2019;. A terminal is allocated when standard input and output
+      are terminals. The exit status is that of
+    <var class="Ar">command</var>.</dd>
+  <dt id="sync"><a class="permalink" href="#sync"><code class="Cm">sync</code></a></dt>
+  <dd>Copy the project directory into the guest; see
+      <a class="Sx" href="#SYNCING">SYNCING</a>.</dd>
+  <dt id="provision"><a class="permalink" href="#provision"><code class="Cm">provision</code></a></dt>
+  <dd>Install the packages and run the provision commands again on the running
+      VM.</dd>
+  <dt id="logs"><a class="permalink" href="#logs"><code class="Cm">logs</code></a>
+    [<code class="Fl">-F</code>]</dt>
+  <dd>Print the guest's serial console log, which shows the boot and is the
+      first place to look when <code class="Cm">up</code> times out.</dd>
+  <dt id="pull"><a class="permalink" href="#pull"><code class="Cm">pull</code></a></dt>
+  <dd>Download and cache the base image for the environment file without booting
+      anything.</dd>
+  <dt id="images"><a class="permalink" href="#images"><code class="Cm">images</code></a></dt>
+  <dd>List cached base images and their sizes.</dd>
+  <dt id="man"><a class="permalink" href="#man"><code class="Cm">man</code></a>
+    [<code class="Fl">--install</code>]</dt>
+  <dd>Print this manual page to standard output. With
+      <code class="Fl">--install</code>, write it to
+      <span class="Pa">../share/man/man1/bsdt.1</span> relative to the directory
+      holding the <code class="Nm">bsdt</code> binary instead, and print the
+      path written.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="OPTIONS"><a class="permalink" href="#OPTIONS">OPTIONS</a></h1>
+<dl class="Bl-tag">
+  <dt id="f"><a class="permalink" href="#f"><code class="Fl">-f</code></a>,
+    <code class="Fl">--file</code> <var class="Ar">file</var></dt>
+  <dd>Use <var class="Ar">file</var> as the environment file instead of the
+      first <span class="Pa">bsdt.toml</span> found in the current directory or
+      its parents. Each environment file gets its own VM, so one project can
+      have several.</dd>
+  <dt id="root"><a class="permalink" href="#root"><code class="Fl">--root</code></a></dt>
+  <dd>For <code class="Cm">ssh</code> and <code class="Cm">exec</code>, log in
+      as root instead of the &#x2018;<code class="Li">bsdt</code>&#x2019;
+    user.</dd>
+  <dt id="no-sync"><a class="permalink" href="#no-sync"><code class="Fl">--no-sync</code></a></dt>
+  <dd>For <code class="Cm">exec</code>, skip syncing the project first.</dd>
+  <dt id="F"><a class="permalink" href="#F"><code class="Fl">-F</code></a>,
+    <code class="Fl">--follow</code></dt>
+  <dd>For <code class="Cm">logs</code>, keep printing as the log grows.</dd>
+  <dt id="h"><a class="permalink" href="#h"><code class="Fl">-h</code></a>,
+    <code class="Fl">--help</code></dt>
+  <dd>Print a short usage summary.</dd>
+  <dt id="V"><a class="permalink" href="#V"><code class="Fl">-V</code></a>,
+    <code class="Fl">--version</code></dt>
+  <dd>Print the version.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="ENVIRONMENT_FILE"><a class="permalink" href="#ENVIRONMENT_FILE">ENVIRONMENT
+  FILE</a></h1>
+<p class="Pp">The environment file is TOML. Only <code class="Ic">vm.os</code>
+    and <code class="Ic">vm.version</code> are required.</p>
+<section class="Ss">
+<h2 class="Ss" id="_vm_"><a class="permalink" href="#_vm_">[vm]</a></h2>
+<dl class="Bl-tag">
+  <dt id="os"><a class="permalink" href="#os"><code class="Ic">os</code></a></dt>
+  <dd>The guest operating system. Only
+      &#x2018;<code class="Li">freebsd</code>&#x2019; is supported so far.</dd>
+  <dt id="version"><a class="permalink" href="#version"><code class="Ic">version</code></a></dt>
+  <dd>The release to boot, such as &#x2018;<code class="Li">15.1</code>&#x2019;
+      or &#x2018;<code class="Li">14.5</code>&#x2019;.</dd>
+  <dt id="arch"><a class="permalink" href="#arch"><code class="Ic">arch</code></a></dt>
+  <dd>&#x2018;<code class="Li">auto</code>&#x2019; (the default) to match the
+      host, &#x2018;<code class="Li">amd64</code>&#x2019; or
+      &#x2018;<code class="Li">aarch64</code>&#x2019;.</dd>
+  <dt id="cpus"><a class="permalink" href="#cpus"><code class="Ic">cpus</code></a></dt>
+  <dd>Number of virtual CPUs. Defaults to 2.</dd>
+  <dt id="memory"><a class="permalink" href="#memory"><code class="Ic">memory</code></a></dt>
+  <dd>Memory size in QEMU syntax. Defaults to
+      &#x2018;<code class="Li">2G</code>&#x2019;.</dd>
+  <dt id="disk"><a class="permalink" href="#disk"><code class="Ic">disk</code></a></dt>
+  <dd>Size of the overlay disk; the guest grows its file system to fill it on
+      first boot. Defaults to &#x2018;<code class="Li">20G</code>&#x2019;.</dd>
+  <dt id="filesystem"><a class="permalink" href="#filesystem"><code class="Ic">filesystem</code></a></dt>
+  <dd>&#x2018;<code class="Li">ufs</code>&#x2019; (the default) or
+      &#x2018;<code class="Li">zfs</code>&#x2019;, choosing between the two
+      images FreeBSD publishes.</dd>
+  <dt id="hostname"><a class="permalink" href="#hostname"><code class="Ic">hostname</code></a></dt>
+  <dd>The guest's hostname. Defaults to the project directory's name.</dd>
+  <dt id="update"><a class="permalink" href="#update"><code class="Ic">update</code></a></dt>
+  <dd>When true, let the image install FreeBSD security updates on first boot
+      and reboot, as it does by default outside <code class="Nm">bsdt</code>.
+      Defaults to false, so every VM starts from exactly the release image and
+      the first <code class="Cm">up</code> is much faster. Only read when the
+      disk is created.</dd>
+  <dt id="ports"><a class="permalink" href="#ports"><code class="Ic">ports</code></a></dt>
+  <dd>TCP ports to forward from 127.0.0.1 on the host, as
+      &#x2018;<code class="Li">HOST:GUEST</code>&#x2019; strings, or a single
+      port number when both sides are the same.</dd>
+</dl>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="_packages_"><a class="permalink" href="#_packages_">[packages]</a></h2>
+<dl class="Bl-tag">
+  <dt id="install"><a class="permalink" href="#install"><code class="Ic">install</code></a></dt>
+  <dd>Packages to install with
+      <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=pkg&amp;sektion=8">pkg(8)</a>.
+      <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=rsync&amp;sektion=1">rsync(1)</a>
+      is always installed as well, since <code class="Nm">bsdt</code> needs it
+      to sync.</dd>
+</dl>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="_sync_"><a class="permalink" href="#_sync_">[sync]</a></h2>
+<dl class="Bl-tag">
+  <dt id="dest"><a class="permalink" href="#dest"><code class="Ic">dest</code></a></dt>
+  <dd>Absolute guest path to sync the project to. Defaults to
+      <span class="Pa">/home/bsdt/</span><var class="Ar">name</var>, where
+      <var class="Ar">name</var> is the project directory's name.</dd>
+  <dt id="exclude"><a class="permalink" href="#exclude"><code class="Ic">exclude</code></a></dt>
+  <dd><a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=rsync&amp;sektion=1">rsync(1)</a>
+      exclude patterns, such as build output directories.</dd>
+</dl>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="_provision_"><a class="permalink" href="#_provision_">[provision]</a></h2>
+<dl class="Bl-tag">
+  <dt id="root~2"><a class="permalink" href="#root~2"><code class="Ic">root</code></a></dt>
+  <dd>Shell commands run as root after packages are installed.</dd>
+  <dt id="run"><a class="permalink" href="#run"><code class="Ic">run</code></a></dt>
+  <dd>Shell commands run as the &#x2018;<code class="Li">bsdt</code>&#x2019;
+      user in the synced directory, after <code class="Ic">root</code>.</dd>
+</dl>
+<p class="Pp">Provision commands run in order on the first
+    <code class="Cm">up</code> and on every <code class="Cm">provision</code>,
+    and stop at the first failure.</p>
+</section>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNCING"><a class="permalink" href="#SYNCING">SYNCING</a></h1>
+<p class="Pp">The directory holding the environment file is mirrored to
+    <code class="Ic">sync.dest</code> as the
+    &#x2018;<code class="Li">bsdt</code>&#x2019; user by
+    <code class="Cm">up</code>, <code class="Cm">sync</code> and
+    <code class="Cm">exec</code>. Files deleted on the host are deleted in the
+    guest, except for paths matching <code class="Ic">sync.exclude</code>, which
+    are neither copied nor deleted, so build output in the guest survives a
+    sync. The <span class="Pa">.bsdt</span> directory is always excluded.</p>
+<p class="Pp">Syncing is one way, from host to guest. Use
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=scp&amp;sektion=1">scp(1)</a>
+    or <code class="Cm">exec</code> to get results back.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="ENVIRONMENT"><a class="permalink" href="#ENVIRONMENT">ENVIRONMENT</a></h1>
+<dl class="Bl-tag">
+  <dt id="BSDT_CACHE_DIR"><a class="permalink" href="#BSDT_CACHE_DIR"><code class="Ev">BSDT_CACHE_DIR</code></a></dt>
+  <dd>Cache directory to use instead of the default.</dd>
+  <dt id="XDG_CACHE_HOME"><a class="permalink" href="#XDG_CACHE_HOME"><code class="Ev">XDG_CACHE_HOME</code></a></dt>
+  <dd>When set, the cache is <span class="Pa">$XDG_CACHE_HOME/bsdt</span>.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<dl class="Bl-tag">
+  <dt><span class="Pa">bsdt.toml</span></dt>
+  <dd>The environment file.</dd>
+  <dt><span class="Pa">.bsdt/</span><var class="Ar">stem</var><span class="Pa">/</span></dt>
+  <dd>Per-VM state beside the environment file, where <var class="Ar">stem</var>
+      is the environment file's name without <span class="Pa">.toml</span>: the
+      overlay disk <span class="Pa">disk.qcow2</span>, the configuration disk
+      <span class="Pa">seed.img</span>, the SSH key pair
+      <span class="Pa">id_ed25519</span>, the serial console log
+      <span class="Pa">console.log</span>, QEMU's pid file
+      <span class="Pa">qemu.pid</span> and the forwarded ports in
+      <span class="Pa">state.json</span>. It contains a
+      <span class="Pa">.gitignore</span> that ignores everything in it.</dd>
+  <dt><span class="Pa">~/.cache/bsdt/images/</span></dt>
+  <dd>Cached base images on Linux;
+      <span class="Pa">~/Library/Caches/bsdt/images/</span> on macOS. Delete
+      files here to free space.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXIT_STATUS"><a class="permalink" href="#EXIT_STATUS">EXIT
+  STATUS</a></h1>
+<p class="Pp"><code class="Cm">ssh</code> and <code class="Cm">exec</code> exit
+    with the status of the remote shell or command. Otherwise,
+  <br/>
+  The <code class="Nm">bsdt</code> utility exits&#x00A0;0 on success,
+    and&#x00A0;&gt;0 if an error occurs.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<p class="Pp">Start a project with a FreeBSD 15.1 VM that has Rust
+  installed:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ bsdt init
+$ $EDITOR bsdt.toml
+$ bsdt up</pre>
+</div>
+<p class="Pp">with a <span class="Pa">bsdt.toml</span> like:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>[vm]
+os = &quot;freebsd&quot;
+version = &quot;15.1&quot;
+memory = &quot;4G&quot;
+ports = [&quot;8080&quot;]
+
+[packages]
+install = [&quot;rust&quot;, &quot;git&quot;]
+
+[sync]
+exclude = [&quot;target&quot;]
+
+[provision]
+run = [&quot;cargo fetch&quot;]</pre>
+</div>
+<p class="Pp">Build and test after editing on the host:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ bsdt exec -- cargo test</pre>
+</div>
+<p class="Pp">Run a pipeline, which needs a shell in the guest:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ bsdt exec -- sh -c 'uname -a | tee uname.txt'</pre>
+</div>
+<p class="Pp">Keep a second VM for an older release next to the default one:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ cp bsdt.toml freebsd14.toml
+$ sed -i.bak 's/15.1/14.5/' freebsd14.toml
+$ bsdt -f freebsd14.toml up</pre>
+</div>
+<p class="Pp">Start again from a clean disk:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ bsdt destroy &amp;&amp; bsdt up</pre>
+</div>
+<p class="Pp">Install this page after &#x2018;<code class="Li">cargo install
+    bsdt</code>&#x2019;, or read it without installing:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ bsdt man --install
+$ bsdt man | man -l -</pre>
+</div>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h1>
+<p class="Pp"><a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=qemu-img&amp;sektion=1">qemu-img(1)</a>,
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=rsync&amp;sektion=1">rsync(1)</a>,
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=ssh&amp;sektion=1">ssh(1)</a>,
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=nuageinit&amp;sektion=7">nuageinit(7)</a></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<p class="Pp"><span class="An">Divan Visagie</span>
+    &lt;<a class="Mt" href="mailto:me@divanv.com">me@divanv.com</a>&gt;</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="CAVEATS"><a class="permalink" href="#CAVEATS">CAVEATS</a></h1>
+<p class="Pp">The guest's root account has no password on the serial console, as
+    in the official images, and accepts the project's SSH key. The VM is meant
+    for development, not for anything exposed to a network.</p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">October 8, 2026</td>
+    <td class="foot-os">Ubuntu</td>
+  </tr>
+</table>
+</body>
+</html>

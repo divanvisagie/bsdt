@@ -1,0 +1,383 @@
+.Dd October 8, 2026
+.Dt BSDT 1
+.Os
+.Sh NAME
+.Nm bsdt
+.Nd repeatable FreeBSD development VMs from a TOML file
+.Sh SYNOPSIS
+.Nm
+.Op Fl f Ar file
+.Ar command
+.Op Ar args
+.Sh DESCRIPTION
+.Nm
+boots a FreeBSD virtual machine for the project in the current directory,
+described by a
+.Pa bsdt.toml
+environment file, much as
+.Ql docker compose up
+starts containers from a compose file.
+It is meant for building and testing software on FreeBSD while working on
+Linux or macOS.
+.Pp
+The guest is booted with
+.Xr qemu-system-x86_64 1
+or
+.Xr qemu-system-aarch64 1
+from the official FreeBSD
+.Sy BASIC-CLOUDINIT
+VM image, which is downloaded once, checked against the release's
+.Pa CHECKSUM.SHA256
+and cached.
+Each project gets its own copy-on-write overlay disk on top of the cached
+image, so a VM can be thrown away and recreated in seconds.
+.Pp
+On first boot, a small configuration disk is attached that FreeBSD's
+.Xr nuageinit 7
+reads to create a
+.Ql bsdt
+user and to allow key-based SSH logins as that user and as root.
+.Nm
+then installs the listed packages, copies the project into the guest with
+.Xr rsync 1
+and runs the provision commands.
+Later commands reach the guest over SSH on a forwarded port bound to
+127.0.0.1.
+.Pp
+Hardware acceleration is used when the guest architecture matches the
+host: KVM on Linux and the Hypervisor framework on macOS.
+Otherwise QEMU emulates the CPU, which works but is much slower.
+.Pp
+NetBSD and OpenBSD guests are planned.
+They are accepted in the environment file but rejected by
+.Cm up
+for now.
+.Sh COMMANDS
+.Bl -tag -width Ds
+.It Cm init
+Write a commented starter
+.Pa bsdt.toml
+in the current directory, or to the path given with
+.Fl f .
+.It Cm up
+Boot the VM.
+On first use this downloads the base image if needed, creates the
+overlay disk, waits for first-boot setup to finish, installs packages,
+syncs the project and runs the provision commands.
+On later runs it boots the existing disk and syncs.
+Does nothing if the VM is already running.
+.It Cm down
+Shut the guest down through ACPI, waiting up to a minute before stopping
+QEMU forcibly.
+The disk is kept.
+.It Cm destroy
+Stop QEMU immediately and delete the VM's state directory, including its
+disk.
+The cached base image is kept.
+.It Cm status
+Show the environment file, guest, sync destination, whether the VM is
+running, and its forwarded ports.
+.It Cm ssh Op Fl -root
+Open a login shell in the guest directory matching the current directory.
+.It Cm exec Oo Fl -root Oc Oo Fl -no-sync Oc Fl - Ar command Op Ar arg ...
+Sync the project, then run
+.Ar command
+in the guest directory matching the current directory.
+Each argument is passed through unchanged, so shell syntax needs an
+explicit
+.Ql sh -c .
+A terminal is allocated when standard input and output are terminals.
+The exit status is that of
+.Ar command .
+.It Cm sync
+Copy the project directory into the guest; see
+.Sx SYNCING .
+.It Cm provision
+Install the packages and run the provision commands again on the running
+VM.
+.It Cm logs Op Fl F
+Print the guest's serial console log, which shows the boot and is the
+first place to look when
+.Cm up
+times out.
+.It Cm pull
+Download and cache the base image for the environment file without
+booting anything.
+.It Cm images
+List cached base images and their sizes.
+.It Cm man Op Fl -install
+Print this manual page to standard output.
+With
+.Fl -install ,
+write it to
+.Pa ../share/man/man1/bsdt.1
+relative to the directory holding the
+.Nm
+binary instead, and print the path written.
+.El
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl f , Fl -file Ar file
+Use
+.Ar file
+as the environment file instead of the first
+.Pa bsdt.toml
+found in the current directory or its parents.
+Each environment file gets its own VM, so one project can have several.
+.It Fl -root
+For
+.Cm ssh
+and
+.Cm exec ,
+log in as root instead of the
+.Ql bsdt
+user.
+.It Fl -no-sync
+For
+.Cm exec ,
+skip syncing the project first.
+.It Fl F , Fl -follow
+For
+.Cm logs ,
+keep printing as the log grows.
+.It Fl h , Fl -help
+Print a short usage summary.
+.It Fl V , Fl -version
+Print the version.
+.El
+.Sh ENVIRONMENT FILE
+The environment file is TOML.
+Only
+.Ic vm.os
+and
+.Ic vm.version
+are required.
+.Ss [vm]
+.Bl -tag -width Ds
+.It Ic os
+The guest operating system.
+Only
+.Ql freebsd
+is supported so far.
+.It Ic version
+The release to boot, such as
+.Ql 15.1
+or
+.Ql 14.5 .
+.It Ic arch
+.Ql auto
+(the default) to match the host,
+.Ql amd64
+or
+.Ql aarch64 .
+.It Ic cpus
+Number of virtual CPUs.
+Defaults to 2.
+.It Ic memory
+Memory size in QEMU syntax.
+Defaults to
+.Ql 2G .
+.It Ic disk
+Size of the overlay disk; the guest grows its file system to fill it on
+first boot.
+Defaults to
+.Ql 20G .
+.It Ic filesystem
+.Ql ufs
+(the default) or
+.Ql zfs ,
+choosing between the two images FreeBSD publishes.
+.It Ic hostname
+The guest's hostname.
+Defaults to the project directory's name.
+.It Ic update
+When true, let the image install FreeBSD security updates on first boot
+and reboot, as it does by default outside
+.Nm .
+Defaults to false, so every VM starts from exactly the release image and
+the first
+.Cm up
+is much faster.
+Only read when the disk is created.
+.It Ic ports
+TCP ports to forward from 127.0.0.1 on the host, as
+.Ql HOST:GUEST
+strings, or a single port number when both sides are the same.
+.El
+.Ss [packages]
+.Bl -tag -width Ds
+.It Ic install
+Packages to install with
+.Xr pkg 8 .
+.Xr rsync 1
+is always installed as well, since
+.Nm
+needs it to sync.
+.El
+.Ss [sync]
+.Bl -tag -width Ds
+.It Ic dest
+Absolute guest path to sync the project to.
+Defaults to
+.Pa /home/bsdt/ Ns Ar name ,
+where
+.Ar name
+is the project directory's name.
+.It Ic exclude
+.Xr rsync 1
+exclude patterns, such as build output directories.
+.El
+.Ss [provision]
+.Bl -tag -width Ds
+.It Ic root
+Shell commands run as root after packages are installed.
+.It Ic run
+Shell commands run as the
+.Ql bsdt
+user in the synced directory, after
+.Ic root .
+.El
+.Pp
+Provision commands run in order on the first
+.Cm up
+and on every
+.Cm provision ,
+and stop at the first failure.
+.Sh SYNCING
+The directory holding the environment file is mirrored to
+.Ic sync.dest
+as the
+.Ql bsdt
+user by
+.Cm up ,
+.Cm sync
+and
+.Cm exec .
+Files deleted on the host are deleted in the guest, except for paths
+matching
+.Ic sync.exclude ,
+which are neither copied nor deleted, so build output in the guest
+survives a sync.
+The
+.Pa .bsdt
+directory is always excluded.
+.Pp
+Syncing is one way, from host to guest.
+Use
+.Xr scp 1
+or
+.Cm exec
+to get results back.
+.Sh ENVIRONMENT
+.Bl -tag -width Ds
+.It Ev BSDT_CACHE_DIR
+Cache directory to use instead of the default.
+.It Ev XDG_CACHE_HOME
+When set, the cache is
+.Pa $XDG_CACHE_HOME/bsdt .
+.El
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa bsdt.toml
+The environment file.
+.It Pa .bsdt/ Ns Ar stem Ns Pa /
+Per-VM state beside the environment file, where
+.Ar stem
+is the environment file's name without
+.Pa .toml :
+the overlay disk
+.Pa disk.qcow2 ,
+the configuration disk
+.Pa seed.img ,
+the SSH key pair
+.Pa id_ed25519 ,
+the serial console log
+.Pa console.log ,
+QEMU's pid file
+.Pa qemu.pid
+and the forwarded ports in
+.Pa state.json .
+It contains a
+.Pa .gitignore
+that ignores everything in it.
+.It Pa ~/.cache/bsdt/images/
+Cached base images on Linux;
+.Pa ~/Library/Caches/bsdt/images/
+on macOS.
+Delete files here to free space.
+.El
+.Sh EXIT STATUS
+.Cm ssh
+and
+.Cm exec
+exit with the status of the remote shell or command.
+Otherwise,
+.Ex -std
+.Sh EXAMPLES
+Start a project with a FreeBSD 15.1 VM that has Rust installed:
+.Bd -literal -offset indent
+$ bsdt init
+$ $EDITOR bsdt.toml
+$ bsdt up
+.Ed
+.Pp
+with a
+.Pa bsdt.toml
+like:
+.Bd -literal -offset indent
+[vm]
+os = "freebsd"
+version = "15.1"
+memory = "4G"
+ports = ["8080"]
+
+[packages]
+install = ["rust", "git"]
+
+[sync]
+exclude = ["target"]
+
+[provision]
+run = ["cargo fetch"]
+.Ed
+.Pp
+Build and test after editing on the host:
+.Bd -literal -offset indent
+$ bsdt exec -- cargo test
+.Ed
+.Pp
+Run a pipeline, which needs a shell in the guest:
+.Bd -literal -offset indent
+$ bsdt exec -- sh -c 'uname -a | tee uname.txt'
+.Ed
+.Pp
+Keep a second VM for an older release next to the default one:
+.Bd -literal -offset indent
+$ cp bsdt.toml freebsd14.toml
+$ sed -i.bak 's/15.1/14.5/' freebsd14.toml
+$ bsdt -f freebsd14.toml up
+.Ed
+.Pp
+Start again from a clean disk:
+.Bd -literal -offset indent
+$ bsdt destroy && bsdt up
+.Ed
+.Pp
+Install this page after
+.Ql cargo install bsdt ,
+or read it without installing:
+.Bd -literal -offset indent
+$ bsdt man --install
+$ bsdt man | man -l -
+.Ed
+.Sh SEE ALSO
+.Xr qemu-img 1 ,
+.Xr rsync 1 ,
+.Xr ssh 1 ,
+.Xr nuageinit 7
+.Sh AUTHORS
+.An Divan Visagie Aq Mt me@divanv.com
+.Sh CAVEATS
+The guest's root account has no password on the serial console, as in
+the official images, and accepts the project's SSH key.
+The VM is meant for development, not for anything exposed to a network.
