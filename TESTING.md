@@ -133,11 +133,11 @@ Viewer and the built-in Screen Sharing). Then:
       desktop with a foot terminal in `/home/bsdt/gui`.
     - On macOS, note whether Screen Sharing connects. wayvnc has no
       password, which it may refuse.
-20. Type into foot in the viewer window, and press super+return there.
+20. Type into foot in the viewer window, and press alt+return there.
     - The text appears, and a second terminal opens.
 21. From `examples/gui`: `bsdt type --enter 'echo "typed by bsdt: A_b-C!"'`
     - The line appears in the focused terminal exactly as written.
-22. `bsdt key super+return`
+22. `bsdt key alt+return`
     - Another terminal opens.
 23. `bsdt key ctrl+bogus`
     - Fails with QEMU rejecting `bogus`. Typing in the viewer afterwards

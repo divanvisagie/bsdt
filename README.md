@@ -28,7 +28,7 @@ bsdt status                # is it running, and on which ports
 bsdt logs [-F]             # the guest's serial console
 
 bsdt gui                   # reopen the desktop window (gui = true)
-bsdt key super+return      # press keys on the VM's keyboard
+bsdt key alt+return        # press keys on the VM's keyboard
 bsdt type --enter 'ls'     # type text on it
 bsdt down                  # shut down, keeping the disk
 bsdt destroy               # delete the VM's disk and state
@@ -80,7 +80,9 @@ gui = true
 is enough for a sway desktop in a window. The first `bsdt up` installs
 sway, seatd, wayvnc and the foot terminal, and every `up` starts them and
 opens a VNC viewer on the host. Every setting under `[gui]` has a default;
-see the man page to use your own desktop, port or resolution.
+see the man page to use your own desktop, port, resolution, modifier key
+or full screen. Sway uses Alt as its modifier by default (`alt+return` for
+a terminal), because the host desktop usually keeps Super for itself.
 
 FreeBSD has no driver for QEMU's virtual graphics cards, so sway draws to
 a headless output in software and wayvnc shares it. Input comes from the

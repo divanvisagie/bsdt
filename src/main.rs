@@ -183,6 +183,11 @@ fn cmd_up(project: &Project) -> Result<()> {
         return Ok(());
     }
 
+    let gui = &project.config.gui;
+    if vm.gui {
+        gui.size()?;
+    }
+
     let base = image::ensure(&os::image(vm)?)?;
     std::fs::create_dir_all(&paths.dir)?;
     std::fs::write(paths.dir.join(".gitignore"), "*\n")?;
@@ -197,7 +202,6 @@ fn cmd_up(project: &Project) -> Result<()> {
 
     state.ssh_port = qemu::free_port()?;
     state.qmp_port = qemu::free_port()?;
-    let gui = &project.config.gui;
     state.gui_port = match (vm.gui, gui.port) {
         (false, _) => 0,
         (true, Some(port)) => port,
@@ -256,10 +260,11 @@ fn cmd_up(project: &Project) -> Result<()> {
         println!("  port     {port}");
     }
     if vm.gui && gui.open {
-        open_viewer(state.gui_port)?;
+        open_viewer(state.gui_port, gui.fullscreen)?;
     }
     Ok(())
 }
+
 
 /// Install and configure the default sway desktop.
 fn setup_desktop(project: &Project, paths: &Paths, state: &State) -> Result<()> {
@@ -270,8 +275,8 @@ fn setup_desktop(project: &Project, paths: &Paths, state: &State) -> Result<()> 
     ssh.script(User::Root, &gui::sway_root_setup())
 }
 
-fn open_viewer(port: u16) -> Result<()> {
-    match gui::open_viewer(port)? {
+fn open_viewer(port: u16, fullscreen: bool) -> Result<()> {
+    match gui::open_viewer(port, fullscreen)? {
         Some(viewer) => eprintln!("bsdt: opened the desktop in {viewer}"),
         None => eprintln!(
             "bsdt: no VNC viewer found; install one (e.g. TigerVNC: apt install tigervnc-viewer) \
@@ -420,7 +425,7 @@ fn cmd_gui(project: &Project) -> Result<()> {
     if state.gui_port == 0 {
         bail!("this VM has no desktop; set gui = true under [vm] and run `bsdt down && bsdt up`");
     }
-    open_viewer(state.gui_port)
+    open_viewer(state.gui_port, project.config.gui.fullscreen)
 }
 
 fn cmd_key(project: &Project, chords: &[String]) -> Result<()> {

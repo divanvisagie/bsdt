@@ -122,6 +122,13 @@ pub struct Gui {
     pub open: bool,
     #[serde(default = "default_resolution")]
     pub resolution: String,
+    /// Open the viewer full screen, where TigerVNC passes system keys such
+    /// as Super and Alt+Tab to the VM.
+    #[serde(default)]
+    pub fullscreen: bool,
+    /// The sway modifier key in the config bsdt generates.
+    #[serde(default)]
+    pub modifier: Modifier,
 }
 
 impl Default for Gui {
@@ -133,11 +140,22 @@ impl Default for Gui {
             port: None,
             open: true,
             resolution: default_resolution(),
+            fullscreen: false,
+            modifier: Modifier::default(),
         }
     }
 }
 
 impl Gui {
+    /// `resolution` as width and height.
+    pub fn size(&self) -> Result<(u32, u32)> {
+        let parsed = self.resolution.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)));
+        match parsed {
+            Some((w, h)) if w > 0 && h > 0 => Ok((w, h)),
+            _ => bail!("invalid gui.resolution {:?}, expected WIDTHxHEIGHT such as \"1280x800\"", self.resolution),
+        }
+    }
+
     pub fn start(&self) -> Option<&str> {
         match (&self.start, self.desktop) {
             (Some(cmd), _) => Some(cmd.as_str()).filter(|c| !c.trim().is_empty()),
@@ -157,6 +175,25 @@ fn default_true() -> bool {
 
 fn default_resolution() -> String {
     "1280x800".into()
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Modifier {
+    /// Alt, which desktops on the host rarely take for themselves.
+    #[default]
+    Alt,
+    Super,
+}
+
+impl Modifier {
+    /// The name sway uses for it.
+    pub fn sway(self) -> &'static str {
+        match self {
+            Modifier::Alt => "Mod1",
+            Modifier::Super => "Mod4",
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -428,6 +465,9 @@ mod tests {
         assert_eq!(config.gui.port, None);
         assert!(config.gui.open);
         assert_eq!(config.gui.start(), Some("foot"));
+        assert_eq!(config.gui.modifier, Modifier::Alt);
+        assert!(!config.gui.fullscreen);
+        assert_eq!(config.gui.size().unwrap(), (1280, 800));
 
         let config: Config = toml::from_str(
             "[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ngui = true\ninput = false\n[gui]\ndesktop = \"none\"\nstart = \"x11vnc\"\nport = 5901",
@@ -436,6 +476,12 @@ mod tests {
         assert!(!config.vm.input());
         assert_eq!(config.gui.start(), Some("x11vnc"));
         assert_eq!(config.gui.port, Some(5901));
+
+        let mut gui = Gui::default();
+        for bad in ["1280", "x800", "0x800", "1280x"] {
+            gui.resolution = bad.into();
+            assert!(gui.size().is_err(), "{bad} should be rejected");
+        }
 
         let config: Config = toml::from_str("[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ninput = true\n[gui]\nstart = \"\"").unwrap();
         assert!(config.vm.input() && !config.vm.gui);

@@ -171,6 +171,9 @@ impl Qmp {
     pub fn connect(port: u16) -> Result<Qmp> {
         let stream = TcpStream::connect(("127.0.0.1", port)).context("connecting to the QEMU monitor")?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        // Commands are small and each waits for its reply; without this,
+        // Nagle's algorithm and delayed ACKs add ~40ms to every one.
+        stream.set_nodelay(true)?;
         let mut qmp = Qmp { reader: BufReader::new(stream.try_clone()?), writer: stream };
         qmp.read()?; // greeting
         qmp.execute("qmp_capabilities", serde_json::Value::Null)?;
@@ -183,7 +186,7 @@ impl Qmp {
         if !arguments.is_null() {
             request["arguments"] = arguments;
         }
-        writeln!(self.writer, "{request}")?;
+        self.writer.write_all(format!("{request}\n").as_bytes())?;
         loop {
             let reply = self.read()?;
             if let Some(error) = reply.get("error") {
@@ -210,7 +213,7 @@ impl Qmp {
         self.execute("input-send-event", serde_json::json!({ "events": [event] }))?;
         // The guest's USB keyboard polls; sending a whole chord in one
         // command, or keys back to back, loses some of them.
-        std::thread::sleep(Duration::from_millis(30));
+        std::thread::sleep(Duration::from_millis(10));
         Ok(())
     }
 

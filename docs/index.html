@@ -306,8 +306,18 @@
   <dd>Whether <code class="Cm">up</code> opens a viewer window. Defaults to
       true.</dd>
   <dt id="resolution"><a class="permalink" href="#resolution"><code class="Ic">resolution</code></a></dt>
-  <dd>Size of the desktop. Defaults to
-      &#x2018;<code class="Li">1280x800</code>&#x2019;.</dd>
+  <dd>Size of the desktop, as
+      <var class="Ar">width</var><code class="Li">x</code><var class="Ar">height</var>.
+      Defaults to &#x2018;<code class="Li">1280x800</code>&#x2019;.</dd>
+  <dt id="modifier"><a class="permalink" href="#modifier"><code class="Ic">modifier</code></a></dt>
+  <dd>Sway's modifier key in the configuration <code class="Nm">bsdt</code>
+      generates: &#x2018;<code class="Li">alt</code>&#x2019; (the default) or
+      &#x2018;<code class="Li">super</code>&#x2019;. Desktops on the host
+      usually keep Super combinations for themselves while the viewer is in a
+      window, so Alt reaches the VM more reliably.</dd>
+  <dt id="fullscreen"><a class="permalink" href="#fullscreen"><code class="Ic">fullscreen</code></a></dt>
+  <dd>Open the TigerVNC viewer full screen, where it passes system keys such as
+      Super and Alt+Tab to the VM instead of the host. Defaults to false.</dd>
 </dl>
 </section>
 </section>
@@ -347,9 +357,12 @@
     <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=xdg-open&amp;sektion=1">xdg-open(1)</a>
     opens &#x2018;<code class="Li">vnc://</code>&#x2019; links with.</p>
 <p class="Pp">Sway reads <span class="Pa">~/.config/sway/config</span> in the
-    guest, or its stock configuration when that does not exist, where
-    &#x2018;<code class="Li">super+return</code>&#x2019; opens a terminal. Its
-    output and wayvnc's go to <span class="Pa">/tmp/bsdt-sway.log</span> and
+    guest. When that file does not exist, or still starts with the comment
+    <code class="Nm">bsdt</code> writes, <code class="Nm">bsdt</code> generates
+    it from sway's stock configuration with <code class="Ic">gui.modifier</code>
+    as the modifier, so &#x2018;<code class="Li">alt+return</code>&#x2019; opens
+    a terminal by default. Delete the comment to keep your own edits. Its output
+    and wayvnc's go to <span class="Pa">/tmp/bsdt-sway.log</span> and
     <span class="Pa">/tmp/bsdt-wayvnc.log</span> in the guest.</p>
 <p class="Pp">Keys typed into the VNC viewer reach sway through wayvnc, not
     through <span class="Pa">/dev/input</span>. Programs that read input devices
@@ -458,7 +471,7 @@ version = &quot;15.1&quot;
 gui = true
 $ bsdt up
 $ bsdt type --enter 'uname -a'
-$ bsdt key super+return</pre>
+$ bsdt key alt+return</pre>
 </div>
 <p class="Pp">Start again from a clean disk:</p>
 <div class="Bd Pp Bd-indent Li">
