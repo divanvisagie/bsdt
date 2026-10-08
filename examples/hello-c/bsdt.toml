@@ -1,0 +1,14 @@
+# Smoke test: nothing to install (cc is in FreeBSD base), so a full
+# destroy/up cycle takes well under a minute. See TESTING.md.
+
+[vm]
+os = "freebsd"
+version = "15.1"
+ports = ["18080:8080"]   # `bsdt exec -- make serve`, then curl 127.0.0.1:18080
+
+[sync]
+exclude = ["/hello"]     # built in the guest; kept there across syncs
+
+[provision]
+root = ["sysrc -f /etc/rc.conf.d/hello hello_greeting=provisioned"]
+run = ["make"]

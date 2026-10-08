@@ -2,9 +2,13 @@ VERSION := $(shell awk -F\" '/^version = / { print $$2; exit }' Cargo.toml)
 
 RELEASE_BRANCH := master
 
+# Example project used by the try targets: hello-c or hello-rust.
+EXAMPLE ?= hello-c
+BSDT := $(CURDIR)/target/debug/bsdt
+
 .DEFAULT_GOAL := help
 
-.PHONY: help build install test lint docs publish-check publish
+.PHONY: help build install test lint docs try try-down try-destroy publish-check publish
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -24,6 +28,19 @@ test: ## Run all tests
 lint: ## Run clippy and lint the man page
 	cargo clippy --all-targets
 	@command -v mandoc >/dev/null && mandoc -T lint -W warning man/bsdt.1 || true
+
+try: ## Debug-build bsdt and boot an example VM (EXAMPLE=hello-c, the default, or hello-rust)
+	cargo build
+	cd examples/$(EXAMPLE) && $(BSDT) up
+	@echo
+	@echo "Now: export PATH=\"$(CURDIR)/target/debug:\$$PATH\"; cd examples/$(EXAMPLE)"
+	@echo "and use bsdt exec/ssh/sync there; see TESTING.md."
+
+try-down: ## Shut down the example VM, keeping its disk
+	cd examples/$(EXAMPLE) && $(BSDT) down
+
+try-destroy: ## Delete the example VM so the next try starts fresh
+	cd examples/$(EXAMPLE) && $(BSDT) destroy
 
 docs: docs/index.html ## Render the man page to docs/index.html (needs mandoc)
 

@@ -110,6 +110,13 @@ the result.
 Run `make` to list the targets: `build`, `install`, `test`, `lint`,
 `docs`, and `publish-check`/`publish` for crates.io releases.
 
+To try a change against a real VM, `make try` builds a debug binary and
+boots [`examples/hello-c`](examples/hello-c), a C program that needs
+nothing installed. `make try EXAMPLE=hello-rust` boots
+[`examples/hello-rust`](examples/hello-rust) instead. `make try-down` and
+`make try-destroy` stop and delete the VM. [TESTING.md](TESTING.md) is the
+checklist to run by hand before merging `develop` into `master`.
+
 ## License
 
 BSD 3-Clause; see [LICENSE](LICENSE).

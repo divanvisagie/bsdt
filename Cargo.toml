@@ -8,6 +8,7 @@ readme = "README.md"
 description = "Repeatable FreeBSD development VMs from a TOML file, booted with QEMU from the official images"
 keywords = ["freebsd", "qemu", "vm", "bsd", "development"]
 categories = ["command-line-utilities", "development-tools"]
+exclude = ["/examples", "/docs", "/TESTING.md"]
 
 [dependencies]
 anyhow = "1.0.104"

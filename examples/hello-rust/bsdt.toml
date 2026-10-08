@@ -1,0 +1,17 @@
+# The real use case: edit Rust on the host, build and run it on FreeBSD.
+# The first `bsdt up` installs the rust package, so it takes a few minutes.
+
+[vm]
+os = "freebsd"
+version = "15.1"
+cpus = 4
+memory = "4G"
+
+[packages]
+install = ["rust"]
+
+[sync]
+exclude = ["/target"]    # the guest's build cache survives syncs
+
+[provision]
+run = ["cargo build"]
