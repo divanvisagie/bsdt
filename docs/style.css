@@ -8,7 +8,7 @@
 
 :root {
   color-scheme: light dark;
-  --accent-color: #e05a00;
+  --accent-color: #ab2b28; /* FreeBSD red */
   --background-color: #ffffff;
   --text-color: #111111;
   --title-color: #0f0c0a;
@@ -24,6 +24,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --accent-color: #d9443f; /* FreeBSD red, lifted for contrast on black */
     --background-color: #0b0b0b;
     --text-color: #d8d8d8;
     --title-color: #ffffff;
