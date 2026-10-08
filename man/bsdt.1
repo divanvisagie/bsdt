@@ -95,6 +95,58 @@ Copy the project directory into the guest; see
 .It Cm provision
 Install the packages and run the provision commands again on the running
 VM.
+.It Cm gui
+Open a VNC viewer window on the VM's desktop; see
+.Sx DESKTOP .
+.Cm up
+does this already unless
+.Ic gui.open
+is false, so this is for reopening a closed window.
+.It Cm key Ar chord ...
+Press each
+.Ar chord
+in turn on the VM's keyboard, as if typed on it: the keys go through the
+emulated USB keyboard, so the guest sees them in
+.Pa /dev/input .
+A chord is key names joined by
+.Ql +
+or
+.Ql - ,
+pressed in order and released in reverse, such as
+.Ql super+return
+or
+.Ql ctrl-alt-f2 .
+Names are QEMU's key codes, such as
+.Ql a ,
+.Ql 1 ,
+.Ql f5 ,
+.Ql tab ,
+.Ql slash
+or
+.Ql minus ,
+plus the aliases
+.Ql super
+.Pq also Ql meta , Ql win , Ql cmd ,
+.Ql ctrl ,
+.Ql alt ,
+.Ql shift ,
+.Ql enter ,
+.Ql space ,
+.Ql escape
+and
+.Ql plus .
+Needs
+.Ic vm.input ,
+which
+.Ic vm.gui
+turns on.
+.It Cm type Oo Fl -enter Oc Ar text
+Type
+.Ar text
+on the VM's keyboard, one key at a time, assuming a US layout.
+With
+.Fl -enter ,
+press Return afterwards.
 .It Cm logs Op Fl F
 Print the guest's serial console log, which shows the boot and is the
 first place to look when
@@ -136,6 +188,10 @@ user.
 For
 .Cm exec ,
 skip syncing the project first.
+.It Fl -enter
+For
+.Cm type ,
+press Return after the text.
 .It Fl F , Fl -follow
 For
 .Cm logs ,
@@ -199,6 +255,21 @@ the first
 .Cm up
 is much faster.
 Only read when the disk is created.
+.It Ic gui
+When true, run a desktop in the guest and open a window on it; see
+.Sx DESKTOP .
+Defaults to false.
+.It Ic input
+When true, attach a USB keyboard and tablet, which the guest sees as
+evdev devices in
+.Pa /dev/input ,
+and which
+.Cm key
+and
+.Cm type
+press keys on.
+Defaults to the value of
+.Ic gui .
 .It Ic ports
 TCP ports to forward from 127.0.0.1 on the host, as
 .Ql HOST:GUEST
@@ -243,6 +314,128 @@ Provision commands run in order on the first
 and on every
 .Cm provision ,
 and stop at the first failure.
+.Ss [gui]
+Only read when
+.Ic vm.gui
+is true.
+Every key has a default, so the table can be left out.
+.Bl -tag -width Ds
+.It Ic desktop
+.Ql sway
+(the default) or
+.Ql none .
+With
+.Ql sway ,
+.Nm
+installs and runs the desktop described in
+.Sx DESKTOP .
+With
+.Ql none ,
+it runs only
+.Ic start ,
+which must bring up something serving VNC on
+.Ic vnc .
+.It Ic start
+A shell command run as the
+.Ql bsdt
+user in the synced directory once the desktop is up, on every boot.
+With
+.Ql sway ,
+it runs inside the desktop, and defaults to
+.Ql foot ,
+a terminal.
+An empty string runs nothing.
+.It Ic vnc
+Port the guest's VNC server listens on.
+Defaults to 5900.
+.It Ic port
+Host port on 127.0.0.1 forwarded to
+.Ic vnc .
+Defaults to a free port picked at each
+.Cm up ,
+which
+.Cm status
+shows.
+.It Ic open
+Whether
+.Cm up
+opens a viewer window.
+Defaults to true.
+.It Ic resolution
+Size of the desktop.
+Defaults to
+.Ql 1280x800 .
+.El
+.Sh DESKTOP
+FreeBSD has no driver for QEMU's virtual graphics cards, so a desktop
+cannot draw to the VM's own screen.
+Instead, with
+.Ic vm.gui
+set,
+.Nm
+runs
+.Xr sway 1
+on a headless output, drawn in software, and shares it over VNC with
+.Xr wayvnc 1 .
+Input still comes from the VM's USB keyboard and tablet through
+.Sy libinput
+and
+.Xr seatd 1 .
+.Pp
+The first
+.Cm up
+installs
+.Sy sway ,
+.Sy seatd ,
+.Sy wayvnc ,
+.Sy foot
+and
+.Sy dejavu ,
+enables
+.Xr seatd 1 ,
+and adds the
+.Ql bsdt
+user to the
+.Ql video
+group.
+Every
+.Cm up
+then starts sway, wayvnc and
+.Ic gui.start ,
+waits for the VNC server to answer, and opens a viewer on the forwarded
+port.
+On macOS that is the TigerVNC viewer if it is installed, and otherwise
+Screen Sharing.
+On other systems it is the first of
+.Xr vncviewer 1 ,
+.Xr xtigervncviewer 1 ,
+.Xr remmina 1
+and
+.Xr krdc 1
+that is installed, or whatever
+.Xr xdg-open 1
+opens
+.Ql vnc://
+links with.
+.Pp
+Sway reads
+.Pa ~/.config/sway/config
+in the guest, or its stock configuration when that does not exist, where
+.Ql super+return
+opens a terminal.
+Its output and wayvnc's go to
+.Pa /tmp/bsdt-sway.log
+and
+.Pa /tmp/bsdt-wayvnc.log
+in the guest.
+.Pp
+Keys typed into the VNC viewer reach sway through wayvnc, not through
+.Pa /dev/input .
+Programs that read input devices directly, such as hotkey daemons, only
+see keys sent with
+.Cm key
+and
+.Cm type .
 .Sh SYNCING
 The directory holding the environment file is mirrored to
 .Ic sync.dest
@@ -358,6 +551,18 @@ $ sed -i.bak 's/15.1/14.5/' freebsd14.toml
 $ bsdt -f freebsd14.toml up
 .Ed
 .Pp
+Open a sway desktop, then drive it from a script:
+.Bd -literal -offset indent
+$ cat bsdt.toml
+[vm]
+os = "freebsd"
+version = "15.1"
+gui = true
+$ bsdt up
+$ bsdt type --enter 'uname -a'
+$ bsdt key super+return
+.Ed
+.Pp
 Start again from a clean disk:
 .Bd -literal -offset indent
 $ bsdt destroy && bsdt up
@@ -378,6 +583,10 @@ $ bsdt man | man -l -
 .Sh AUTHORS
 .An Divan Visagie Aq Mt me@divanv.com
 .Sh CAVEATS
+The desktop's VNC server has no password.
+Like SSH, it is only reachable through a port bound to 127.0.0.1 on the
+host.
+.Pp
 The guest's root account has no password on the serial console, as in
 the official images, and accepts the project's SSH key.
 The VM is meant for development, not for anything exposed to a network.

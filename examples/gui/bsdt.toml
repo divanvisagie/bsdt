@@ -1,0 +1,8 @@
+# A sway desktop in a window. `gui = true` is all it takes: bsdt installs
+# sway, seatd, wayvnc and foot, starts them on every boot, and opens a VNC
+# viewer on the host. See TESTING.md for what to try.
+
+[vm]
+os = "freebsd"
+version = "15.1"
+gui = true

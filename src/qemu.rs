@@ -19,6 +19,10 @@ pub struct Launch<'a> {
     pub ssh_port: u16,
     pub qmp_port: u16,
     pub ports: &'a [Port],
+    /// Host port forwarded to the guest's VNC server, when `gui` is on.
+    pub vnc: Option<(u16, u16)>,
+    /// Attach a USB keyboard and tablet.
+    pub input: bool,
     pub console: &'a Path,
     pub pidfile: &'a Path,
 }
@@ -76,6 +80,9 @@ pub fn start(l: &Launch) -> Result<Accel> {
     for port in l.ports {
         netdev.push_str(&format!(",hostfwd=tcp:127.0.0.1:{}-:{}", port.host, port.guest));
     }
+    if let Some((host, guest)) = l.vnc {
+        netdev.push_str(&format!(",hostfwd=tcp:127.0.0.1:{host}-:{guest}"));
+    }
 
     let mut cmd = Command::new(binary);
     cmd.args(["-machine", machine, "-accel", accel_name, "-cpu", cpu])
@@ -93,6 +100,11 @@ pub fn start(l: &Launch) -> Result<Accel> {
         .arg("-pidfile")
         .arg(l.pidfile)
         .arg("-daemonize");
+    if l.input {
+        // USB rather than virtio input: FreeBSD's USB HID drivers feed evdev,
+        // so the devices show up in /dev/input for libinput.
+        cmd.args(["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]);
+    }
     if l.arch == Arch::Aarch64 {
         cmd.arg("-bios").arg(aarch64_firmware(binary)?);
     }
@@ -149,19 +161,80 @@ pub fn running_pid(pidfile: &Path) -> Option<i32> {
     (unsafe { libc::kill(pid, 0) } == 0).then_some(pid)
 }
 
+/// A QMP connection to a running QEMU.
+pub struct Qmp {
+    reader: BufReader<TcpStream>,
+    writer: TcpStream,
+}
+
+impl Qmp {
+    pub fn connect(port: u16) -> Result<Qmp> {
+        let stream = TcpStream::connect(("127.0.0.1", port)).context("connecting to the QEMU monitor")?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        let mut qmp = Qmp { reader: BufReader::new(stream.try_clone()?), writer: stream };
+        qmp.read()?; // greeting
+        qmp.execute("qmp_capabilities", serde_json::Value::Null)?;
+        Ok(qmp)
+    }
+
+    /// Run `command`, failing if QEMU returns an error.
+    pub fn execute(&mut self, command: &str, arguments: serde_json::Value) -> Result<serde_json::Value> {
+        let mut request = serde_json::json!({ "execute": command });
+        if !arguments.is_null() {
+            request["arguments"] = arguments;
+        }
+        writeln!(self.writer, "{request}")?;
+        loop {
+            let reply = self.read()?;
+            if let Some(error) = reply.get("error") {
+                bail!("QEMU rejected {command}: {}", error["desc"].as_str().unwrap_or("unknown error"));
+            }
+            // Asynchronous events can arrive before the reply.
+            if let Some(ret) = reply.get("return") {
+                return Ok(ret.clone());
+            }
+        }
+    }
+
+    fn read(&mut self) -> Result<serde_json::Value> {
+        let mut line = String::new();
+        if self.reader.read_line(&mut line)? == 0 {
+            bail!("the QEMU monitor closed the connection");
+        }
+        Ok(serde_json::from_str(&line)?)
+    }
+
+    /// Press or release one key, by QEMU key code name.
+    pub fn key(&mut self, code: &str, down: bool) -> Result<()> {
+        let event = serde_json::json!({ "type": "key", "data": { "down": down, "key": { "type": "qcode", "data": code } } });
+        self.execute("input-send-event", serde_json::json!({ "events": [event] }))?;
+        // The guest's USB keyboard polls; sending a whole chord in one
+        // command, or keys back to back, loses some of them.
+        std::thread::sleep(Duration::from_millis(30));
+        Ok(())
+    }
+
+    /// Press `codes` in order, then release them in reverse. If QEMU rejects
+    /// a key, the ones already pressed are released so none stay held.
+    pub fn chord(&mut self, codes: &[&str]) -> Result<()> {
+        for (i, code) in codes.iter().enumerate() {
+            if let Err(err) = self.key(code, true) {
+                for held in codes[..i].iter().rev() {
+                    self.key(held, false).ok();
+                }
+                return Err(err);
+            }
+        }
+        for code in codes.iter().rev() {
+            self.key(code, false)?;
+        }
+        Ok(())
+    }
+}
+
 /// Send one QMP command, e.g. `system_powerdown` or `quit`.
 pub fn qmp(port: u16, command: &str) -> Result<()> {
-    let stream = TcpStream::connect(("127.0.0.1", port)).context("connecting to the QEMU monitor")?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut writer = stream;
-    let mut line = String::new();
-    reader.read_line(&mut line)?; // greeting
-    for cmd in ["qmp_capabilities", command] {
-        writeln!(writer, "{{\"execute\":\"{cmd}\"}}")?;
-        line.clear();
-        reader.read_line(&mut line)?;
-    }
+    Qmp::connect(port)?.execute(command, serde_json::Value::Null)?;
     Ok(())
 }
 

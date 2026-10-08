@@ -27,8 +27,8 @@ There are two ways to run your working copy:
 
 Each example keeps its VM in its own `.bsdt/` directory, which ignores
 itself in git. `make try-down` and `make try-destroy` stop and delete the
-example VM. Add `EXAMPLE=hello-rust` to any try target to use the other
-example.
+example VM. Add `EXAMPLE=hello-rust` or `EXAMPLE=gui` to any try target to use
+another example.
 
 The first run downloads a FreeBSD image of about 650 MB. Later runs reuse
 it from `~/.cache/bsdt/images` (`~/Library/Caches/bsdt/images` on macOS).
@@ -39,6 +39,8 @@ it from `~/.cache/bsdt/images` (`~/Library/Caches/bsdt/images` on macOS).
   full `destroy` and `up` cycle takes under a minute. It forwards
   `127.0.0.1:18080` to port 8080 in the guest, runs a root and a user
   provision command, and excludes the built `hello` binary from syncing.
+- **`examples/gui`** is `gui = true` and nothing else: a sway desktop in a
+  VNC viewer window.
 - **`examples/hello-rust`** is the real use case: install `rust`, edit on
   the host, and build on FreeBSD. The first `up` takes a few minutes while
   the package installs.
@@ -120,23 +122,50 @@ under each step.
       syncs.
 18. `make try-destroy EXAMPLE=hello-rust`
 
+### Desktop
+
+Install a VNC viewer first (TigerVNC on Linux; on macOS try both TigerVNC
+Viewer and the built-in Screen Sharing). Then:
+
+19. `make try EXAMPLE=gui`
+    - About a minute and a half the first time while the desktop installs.
+    - `ready` lists a `gui` line, and a viewer window opens on a sway
+      desktop with a foot terminal in `/home/bsdt/gui`.
+    - On macOS, note whether Screen Sharing connects. wayvnc has no
+      password, which it may refuse.
+20. Type into foot in the viewer window, and press super+return there.
+    - The text appears, and a second terminal opens.
+21. From `examples/gui`: `bsdt type --enter 'echo "typed by bsdt: A_b-C!"'`
+    - The line appears in the focused terminal exactly as written.
+22. `bsdt key super+return`
+    - Another terminal opens.
+23. `bsdt key ctrl+bogus`
+    - Fails with QEMU rejecting `bogus`. Typing in the viewer afterwards
+      is not stuck with Ctrl held.
+24. Close the viewer window, then `bsdt gui`
+    - It opens again.
+25. `bsdt down && bsdt up`
+    - The desktop comes back in well under a minute, without
+      reinstalling anything.
+26. `make try-destroy EXAMPLE=gui`
+
 ### Errors
 
 From an empty temporary directory:
 
-19. `bsdt status`
+27. `bsdt status`
     - `no bsdt.toml in … or its parents (run bsdt init to create one)`.
-20. `bsdt init && bsdt init`
+28. `bsdt init && bsdt init`
     - `wrote bsdt.toml`, then `bsdt.toml already exists`.
-21. Set `version = "13.9"`, then `bsdt pull`
+29. Set `version = "13.9"`, then `bsdt pull`
     - Fails with a 404 on `CHECKSUM.SHA256` and suggests checking the
       version.
-22. Set `os = "openbsd"`, then `bsdt up`
+30. Set `os = "openbsd"`, then `bsdt up`
     - `openbsd guests are planned but not supported yet`.
 
 ### Man page
 
-23. `bsdt man | man -l -` (`mandoc -a` on macOS: `bsdt man | mandoc -a`)
+31. `bsdt man | man -l -` (`mandoc -a` on macOS: `bsdt man | mandoc -a`)
     - The page renders, with every command listed.
 
 ## Platform notes
@@ -146,7 +175,8 @@ From an empty temporary directory:
   the `kvm` group to fix it.
 - **Apple Silicon**: guests default to aarch64 and use HVF. This has not
   been tested yet, so watch for problems finding the UEFI firmware and
-  booting, and report what `bsdt logs` shows.
+  booting, and report what `bsdt logs` shows. The desktop (steps 19 to
+  26) is untested there too.
 - **`arch = "amd64"` on Apple Silicon, or `aarch64` on an x86 host**: works
   through emulation, but expect first boot to take several minutes.
 
@@ -157,3 +187,5 @@ From an empty temporary directory:
 - The VM's SSH key is `.bsdt/bsdt/id_ed25519`, and the port is in
   `.bsdt/bsdt/state.json`, if you want to connect with plain `ssh`.
 - `/var/log/nuageinit.log` in the guest shows what first-boot setup did.
+- With `gui = true`, `/tmp/bsdt-sway.log` and `/tmp/bsdt-wayvnc.log` in the
+  guest show why the desktop or VNC server did not start.

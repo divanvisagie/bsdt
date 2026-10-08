@@ -1,0 +1,198 @@
+//! `gui = true`: a desktop in the guest, shared over VNC, and a viewer
+//! window on the host.
+//!
+//! FreeBSD has no DRM driver for QEMU's virtual GPUs, so the default
+//! desktop is sway on a wlroots headless output, drawn in software and
+//! shared by wayvnc. Input still comes from /dev/input through libinput,
+//! so the VM's USB keyboard and tablet (and `bsdt key`) drive it.
+
+use std::io::Read;
+use std::net::TcpStream;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+use anyhow::{Result, bail};
+
+use crate::config::{Desktop, GUEST_USER, Gui};
+use crate::ssh::quote;
+
+/// Packages the sway desktop needs, beyond what the user lists.
+pub const SWAY_PACKAGES: &[&str] = &["sway", "seatd", "wayvnc", "foot", "dejavu"];
+
+/// Root setup for the sway desktop: seatd hands sway the input devices,
+/// and only members of `video` may talk to it.
+pub fn sway_root_setup() -> String {
+    format!(
+        "sysrc seatd_enable=YES >/dev/null && \
+         (service seatd status >/dev/null 2>&1 || service seatd start >/dev/null 2>&1 </dev/null) && \
+         pw groupmod video -m {GUEST_USER}"
+    )
+}
+
+/// Where the desktop's sockets live in the guest.
+const RUNTIME_DIR: &str = "/tmp/bsdt-xdg";
+
+/// Shell script, run as the guest user on every boot, that brings up the
+/// desktop and the VNC server and then runs `start`. Everything long-lived
+/// goes through daemon(8), which detaches it from the SSH session.
+pub fn start_script(gui: &Gui, dir: &str) -> String {
+    let mut script = format!("export XDG_RUNTIME_DIR={RUNTIME_DIR}\nmkdir -p -m 700 \"$XDG_RUNTIME_DIR\"\n");
+    match gui.desktop {
+        Desktop::Sway => {
+            script.push_str(&format!(
+                r#"if ! pgrep -qxu {user} sway; then
+    rm -f "$XDG_RUNTIME_DIR"/*
+    env WLR_BACKENDS=headless,libinput WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
+        LIBSEAT_BACKEND=seatd daemon -f -o /tmp/bsdt-sway.log sway
+fi
+i=0
+until SWAYSOCK=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.*.sock 2>/dev/null | head -n 1) &&
+        [ -n "$SWAYSOCK" ] && swaymsg -s "$SWAYSOCK" -t get_version >/dev/null 2>&1; do
+    i=$((i + 1))
+    if [ $i -ge 100 ]; then
+        echo "sway did not start; /tmp/bsdt-sway.log says:" >&2
+        tail -n 20 /tmp/bsdt-sway.log >&2
+        exit 1
+    fi
+    sleep 0.2
+done
+export SWAYSOCK
+export WAYLAND_DISPLAY=$(cd "$XDG_RUNTIME_DIR" && ls wayland-* | grep -v '\.lock$' | head -n 1)
+swaymsg -q {mode}
+pgrep -qxu {user} wayvnc || daemon -f -o /tmp/bsdt-wayvnc.log wayvnc 0.0.0.0 {vnc}
+"#,
+                user = GUEST_USER,
+                mode = quote(&format!("output * mode {}", gui.resolution)),
+                vnc = gui.vnc,
+            ));
+            if let Some(start) = gui.start() {
+                // Through sway, so it gets the desktop's environment.
+                script.push_str(&format!("swaymsg -q exec {}\n", quote(&format!("cd {} && {start}", quote(dir)))));
+            }
+        }
+        Desktop::None => {
+            if let Some(start) = gui.start() {
+                script.push_str(&format!(
+                    "cd {} && daemon -f -o /tmp/bsdt-gui.log sh -c {}\n",
+                    quote(dir),
+                    quote(start)
+                ));
+            }
+        }
+    }
+    script
+}
+
+/// Wait until something answers with a VNC (RFB) greeting on `port`.
+pub fn wait_vnc(port: u16, timeout: Duration) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
+            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let mut greeting = [0; 4];
+            if stream.read_exact(&mut greeting).is_ok() && &greeting == b"RFB " {
+                return Ok(());
+            }
+        }
+        if Instant::now() > deadline {
+            bail!("no VNC server answered on 127.0.0.1:{port} within {}s", timeout.as_secs());
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
+/// Open a VNC viewer on `127.0.0.1:port`, returning what was opened, or
+/// `None` when no viewer could be found.
+pub fn open_viewer(port: u16) -> Result<Option<String>> {
+    let url = format!("vnc://127.0.0.1:{port}");
+    if cfg!(target_os = "macos") {
+        // Prefer TigerVNC when installed: Screen Sharing insists on
+        // authentication, which wayvnc does not offer without TLS.
+        if let Some(app) = macos_app("TigerVNC Viewer") {
+            spawn(Command::new("open").arg("-a").arg(&app).arg("--args").arg(format!("127.0.0.1::{port}")))?;
+            return Ok(Some(app.display().to_string()));
+        }
+        spawn(Command::new("open").arg(&url))?;
+        return Ok(Some("Screen Sharing".into()));
+    }
+
+    let tiger = format!("127.0.0.1::{port}");
+    let viewers: [(&str, Vec<String>); 4] = [
+        ("vncviewer", vec![tiger.clone()]),
+        ("xtigervncviewer", vec![tiger]),
+        ("remmina", vec!["-c".into(), url.clone()]),
+        ("krdc", vec![url.clone()]),
+    ];
+    for (binary, args) in viewers {
+        if which(binary) {
+            spawn(Command::new(binary).args(args))?;
+            return Ok(Some(binary.into()));
+        }
+    }
+    // Whatever the desktop has registered for vnc:// URLs, if anything.
+    if which("xdg-open") {
+        let status = Command::new("xdg-open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).status()?;
+        if status.success() {
+            return Ok(Some("xdg-open".into()));
+        }
+    }
+    Ok(None)
+}
+
+/// Start a viewer that outlives bsdt, in its own session.
+fn spawn(cmd: &mut Command) -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
+    Ok(())
+}
+
+fn which(binary: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(binary).is_file()))
+}
+
+fn macos_app(prefix: &str) -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Applications"));
+    [Some(PathBuf::from("/Applications")), home].into_iter().flatten().find_map(|dir| {
+        std::fs::read_dir(dir)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with(prefix))
+            .map(|e| e.path())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn gui(extra: &str) -> Gui {
+        let config: Config =
+            toml::from_str(&format!("[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ngui = true\n{extra}")).unwrap();
+        config.gui
+    }
+
+    #[test]
+    fn sway_script_starts_desktop_vnc_and_terminal() {
+        let script = start_script(&gui(""), "/home/bsdt/app");
+        assert!(script.contains("WLR_BACKENDS=headless,libinput"));
+        assert!(script.contains("swaymsg -q 'output * mode 1280x800'"));
+        assert!(script.contains("wayvnc 0.0.0.0 5900"));
+        assert!(script.contains(r#"swaymsg -q exec 'cd '\''/home/bsdt/app'\'' && foot'"#));
+    }
+
+    #[test]
+    fn custom_desktop_only_runs_start() {
+        let script = start_script(&gui("[gui]\ndesktop = \"none\"\nstart = \"Xvnc :0\""), "/w");
+        assert!(!script.contains("sway"));
+        assert!(script.contains("daemon -f -o /tmp/bsdt-gui.log sh -c 'Xvnc :0'"));
+    }
+}

@@ -106,6 +106,16 @@ impl Ssh {
         Ok(())
     }
 
+    /// Run a script in the guest without a terminal or stdin, sharing this
+    /// process's output; an unsuccessful exit is an error.
+    pub fn script(&self, user: User, script: &str) -> Result<()> {
+        let status = self.command(user).arg("-T").arg(script).stdin(Stdio::null()).status()?;
+        if !status.success() {
+            bail!("a setup script failed in the guest ({status})");
+        }
+        Ok(())
+    }
+
     /// Open an interactive login shell in `dir`.
     pub fn shell(&self, user: User, dir: &str) -> Result<ExitStatus> {
         let mut cmd = self.command(user);

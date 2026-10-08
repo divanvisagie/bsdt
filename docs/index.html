@@ -105,6 +105,43 @@
   <dt id="provision"><a class="permalink" href="#provision"><code class="Cm">provision</code></a></dt>
   <dd>Install the packages and run the provision commands again on the running
       VM.</dd>
+  <dt id="gui"><a class="permalink" href="#gui"><code class="Cm">gui</code></a></dt>
+  <dd>Open a VNC viewer window on the VM's desktop; see
+      <a class="Sx" href="#DESKTOP">DESKTOP</a>. <code class="Cm">up</code> does
+      this already unless <code class="Ic">gui.open</code> is false, so this is
+      for reopening a closed window.</dd>
+  <dt id="key"><a class="permalink" href="#key"><code class="Cm">key</code></a>
+    <var class="Ar">chord ...</var></dt>
+  <dd>Press each <var class="Ar">chord</var> in turn on the VM's keyboard, as if
+      typed on it: the keys go through the emulated USB keyboard, so the guest
+      sees them in <span class="Pa">/dev/input</span>. A chord is key names
+      joined by &#x2018;<code class="Li">+</code>&#x2019; or
+      &#x2018;<code class="Li">-</code>&#x2019;, pressed in order and released
+      in reverse, such as &#x2018;<code class="Li">super+return</code>&#x2019;
+      or &#x2018;<code class="Li">ctrl-alt-f2</code>&#x2019;. Names are QEMU's
+      key codes, such as &#x2018;<code class="Li">a</code>&#x2019;,
+      &#x2018;<code class="Li">1</code>&#x2019;,
+      &#x2018;<code class="Li">f5</code>&#x2019;,
+      &#x2018;<code class="Li">tab</code>&#x2019;,
+      &#x2018;<code class="Li">slash</code>&#x2019; or
+      &#x2018;<code class="Li">minus</code>&#x2019;, plus the aliases
+      &#x2018;<code class="Li">super</code>&#x2019; (also
+      &#x2018;<code class="Li">meta, &#x2018;<code class="Li">win,
+      &#x2018;<code class="Li">cmd</code>&#x2019;</code>&#x2019;</code>&#x2019;),
+      &#x2018;<code class="Li">ctrl</code>&#x2019;,
+      &#x2018;<code class="Li">alt</code>&#x2019;,
+      &#x2018;<code class="Li">shift</code>&#x2019;,
+      &#x2018;<code class="Li">enter</code>&#x2019;,
+      &#x2018;<code class="Li">space</code>&#x2019;,
+      &#x2018;<code class="Li">escape</code>&#x2019; and
+      &#x2018;<code class="Li">plus</code>&#x2019;. Needs
+      <code class="Ic">vm.input</code>, which <code class="Ic">vm.gui</code>
+      turns on.</dd>
+  <dt id="type"><a class="permalink" href="#type"><code class="Cm">type</code></a>
+    [<code class="Fl">--enter</code>] <var class="Ar">text</var></dt>
+  <dd>Type <var class="Ar">text</var> on the VM's keyboard, one key at a time,
+      assuming a US layout. With <code class="Fl">--enter</code>, press Return
+      afterwards.</dd>
   <dt id="logs"><a class="permalink" href="#logs"><code class="Cm">logs</code></a>
     [<code class="Fl">-F</code>]</dt>
   <dd>Print the guest's serial console log, which shows the boot and is the
@@ -138,6 +175,8 @@
     user.</dd>
   <dt id="no-sync"><a class="permalink" href="#no-sync"><code class="Fl">--no-sync</code></a></dt>
   <dd>For <code class="Cm">exec</code>, skip syncing the project first.</dd>
+  <dt id="enter"><a class="permalink" href="#enter"><code class="Fl">--enter</code></a></dt>
+  <dd>For <code class="Cm">type</code>, press Return after the text.</dd>
   <dt id="F"><a class="permalink" href="#F"><code class="Fl">-F</code></a>,
     <code class="Fl">--follow</code></dt>
   <dd>For <code class="Cm">logs</code>, keep printing as the log grows.</dd>
@@ -187,6 +226,14 @@
       Defaults to false, so every VM starts from exactly the release image and
       the first <code class="Cm">up</code> is much faster. Only read when the
       disk is created.</dd>
+  <dt id="gui~2"><a class="permalink" href="#gui~2"><code class="Ic">gui</code></a></dt>
+  <dd>When true, run a desktop in the guest and open a window on it; see
+      <a class="Sx" href="#DESKTOP">DESKTOP</a>. Defaults to false.</dd>
+  <dt id="input"><a class="permalink" href="#input"><code class="Ic">input</code></a></dt>
+  <dd>When true, attach a USB keyboard and tablet, which the guest sees as evdev
+      devices in <span class="Pa">/dev/input</span>, and which
+      <code class="Cm">key</code> and <code class="Cm">type</code> press keys
+      on. Defaults to the value of <code class="Ic">gui</code>.</dd>
   <dt id="ports"><a class="permalink" href="#ports"><code class="Ic">ports</code></a></dt>
   <dd>TCP ports to forward from 127.0.0.1 on the host, as
       &#x2018;<code class="Li">HOST:GUEST</code>&#x2019; strings, or a single
@@ -229,6 +276,85 @@
     <code class="Cm">up</code> and on every <code class="Cm">provision</code>,
     and stop at the first failure.</p>
 </section>
+<section class="Ss">
+<h2 class="Ss" id="_gui_"><a class="permalink" href="#_gui_">[gui]</a></h2>
+<p class="Pp">Only read when <code class="Ic">vm.gui</code> is true. Every key
+    has a default, so the table can be left out.</p>
+<dl class="Bl-tag">
+  <dt id="desktop"><a class="permalink" href="#desktop"><code class="Ic">desktop</code></a></dt>
+  <dd>&#x2018;<code class="Li">sway</code>&#x2019; (the default) or
+      &#x2018;<code class="Li">none</code>&#x2019;. With
+      &#x2018;<code class="Li">sway</code>&#x2019;, <code class="Nm">bsdt</code>
+      installs and runs the desktop described in
+      <a class="Sx" href="#DESKTOP">DESKTOP</a>. With
+      &#x2018;<code class="Li">none</code>&#x2019;, it runs only
+      <code class="Ic">start</code>, which must bring up something serving VNC
+      on <code class="Ic">vnc</code>.</dd>
+  <dt id="start"><a class="permalink" href="#start"><code class="Ic">start</code></a></dt>
+  <dd>A shell command run as the &#x2018;<code class="Li">bsdt</code>&#x2019;
+      user in the synced directory once the desktop is up, on every boot. With
+      &#x2018;<code class="Li">sway</code>&#x2019;, it runs inside the desktop,
+      and defaults to &#x2018;<code class="Li">foot</code>&#x2019;, a terminal.
+      An empty string runs nothing.</dd>
+  <dt id="vnc"><a class="permalink" href="#vnc"><code class="Ic">vnc</code></a></dt>
+  <dd>Port the guest's VNC server listens on. Defaults to 5900.</dd>
+  <dt id="port"><a class="permalink" href="#port"><code class="Ic">port</code></a></dt>
+  <dd>Host port on 127.0.0.1 forwarded to <code class="Ic">vnc</code>. Defaults
+      to a free port picked at each <code class="Cm">up</code>, which
+      <code class="Cm">status</code> shows.</dd>
+  <dt id="open"><a class="permalink" href="#open"><code class="Ic">open</code></a></dt>
+  <dd>Whether <code class="Cm">up</code> opens a viewer window. Defaults to
+      true.</dd>
+  <dt id="resolution"><a class="permalink" href="#resolution"><code class="Ic">resolution</code></a></dt>
+  <dd>Size of the desktop. Defaults to
+      &#x2018;<code class="Li">1280x800</code>&#x2019;.</dd>
+</dl>
+</section>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESKTOP"><a class="permalink" href="#DESKTOP">DESKTOP</a></h1>
+<p class="Pp">FreeBSD has no driver for QEMU's virtual graphics cards, so a
+    desktop cannot draw to the VM's own screen. Instead, with
+    <code class="Ic">vm.gui</code> set, <code class="Nm">bsdt</code> runs
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=sway&amp;sektion=1">sway(1)</a>
+    on a headless output, drawn in software, and shares it over VNC with
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=wayvnc&amp;sektion=1">wayvnc(1)</a>.
+    Input still comes from the VM's USB keyboard and tablet through
+    <a class="permalink" href="#libinput"><b class="Sy" id="libinput">libinput</b></a>
+    and
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=seatd&amp;sektion=1">seatd(1)</a>.</p>
+<p class="Pp" id="sway">The first <code class="Cm">up</code> installs
+    <a class="permalink" href="#sway"><b class="Sy">sway</b></a>,
+    <a class="permalink" href="#seatd"><b class="Sy" id="seatd">seatd</b></a>,
+    <a class="permalink" href="#wayvnc"><b class="Sy" id="wayvnc">wayvnc</b></a>,
+    <a class="permalink" href="#foot"><b class="Sy" id="foot">foot</b></a> and
+    <a class="permalink" href="#dejavu"><b class="Sy" id="dejavu">dejavu</b></a>,
+    enables
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=seatd&amp;sektion=1">seatd(1)</a>,
+    and adds the &#x2018;<code class="Li">bsdt</code>&#x2019; user to the
+    &#x2018;<code class="Li">video</code>&#x2019; group. Every
+    <code class="Cm">up</code> then starts sway, wayvnc and
+    <code class="Ic">gui.start</code>, waits for the VNC server to answer, and
+    opens a viewer on the forwarded port. On macOS that is the TigerVNC viewer
+    if it is installed, and otherwise Screen Sharing. On other systems it is the
+    first of
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=vncviewer&amp;sektion=1">vncviewer(1)</a>,
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=xtigervncviewer&amp;sektion=1">xtigervncviewer(1)</a>,
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=remmina&amp;sektion=1">remmina(1)</a>
+    and
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=krdc&amp;sektion=1">krdc(1)</a>
+    that is installed, or whatever
+    <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=xdg-open&amp;sektion=1">xdg-open(1)</a>
+    opens &#x2018;<code class="Li">vnc://</code>&#x2019; links with.</p>
+<p class="Pp">Sway reads <span class="Pa">~/.config/sway/config</span> in the
+    guest, or its stock configuration when that does not exist, where
+    &#x2018;<code class="Li">super+return</code>&#x2019; opens a terminal. Its
+    output and wayvnc's go to <span class="Pa">/tmp/bsdt-sway.log</span> and
+    <span class="Pa">/tmp/bsdt-wayvnc.log</span> in the guest.</p>
+<p class="Pp">Keys typed into the VNC viewer reach sway through wayvnc, not
+    through <span class="Pa">/dev/input</span>. Programs that read input devices
+    directly, such as hotkey daemons, only see keys sent with
+    <code class="Cm">key</code> and <code class="Cm">type</code>.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="SYNCING"><a class="permalink" href="#SYNCING">SYNCING</a></h1>
@@ -323,6 +449,17 @@ run = [&quot;cargo fetch&quot;]</pre>
 $ sed -i.bak 's/15.1/14.5/' freebsd14.toml
 $ bsdt -f freebsd14.toml up</pre>
 </div>
+<p class="Pp">Open a sway desktop, then drive it from a script:</p>
+<div class="Bd Pp Bd-indent Li">
+<pre>$ cat bsdt.toml
+[vm]
+os = &quot;freebsd&quot;
+version = &quot;15.1&quot;
+gui = true
+$ bsdt up
+$ bsdt type --enter 'uname -a'
+$ bsdt key super+return</pre>
+</div>
 <p class="Pp">Start again from a clean disk:</p>
 <div class="Bd Pp Bd-indent Li">
 <pre>$ bsdt destroy &amp;&amp; bsdt up</pre>
@@ -349,6 +486,8 @@ $ bsdt man | man -l -</pre>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="CAVEATS"><a class="permalink" href="#CAVEATS">CAVEATS</a></h1>
+<p class="Pp">The desktop's VNC server has no password. Like SSH, it is only
+    reachable through a port bound to 127.0.0.1 on the host.</p>
 <p class="Pp">The guest's root account has no password on the serial console, as
     in the official images, and accepts the project's SSH key. The VM is meant
     for development, not for anything exposed to a network.</p>

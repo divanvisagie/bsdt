@@ -29,7 +29,7 @@ lint: ## Run clippy and lint the man page
 	cargo clippy --all-targets
 	@command -v mandoc >/dev/null && mandoc -T lint -W warning man/bsdt.1 || true
 
-try: ## Debug-build bsdt and boot an example VM (EXAMPLE=hello-c, the default, or hello-rust)
+try: ## Debug-build bsdt and boot an example VM (EXAMPLE=hello-c, the default, hello-rust or gui)
 	cargo build
 	cd examples/$(EXAMPLE) && $(BSDT) up
 	@echo

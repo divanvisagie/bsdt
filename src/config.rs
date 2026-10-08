@@ -21,6 +21,8 @@ pub struct Config {
     pub sync: Sync,
     #[serde(default)]
     pub provision: Provision,
+    #[serde(default)]
+    pub gui: Gui,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +48,18 @@ pub struct Vm {
     /// exactly the release image.
     #[serde(default)]
     pub update: bool,
+    /// Run a desktop in the guest and open a window on it; see [`Gui`].
+    #[serde(default)]
+    pub gui: bool,
+    /// Attach a USB keyboard and tablet, for `bsdt key` and anything that
+    /// reads /dev/input. Defaults to on when `gui` is.
+    pub input: Option<bool>,
+}
+
+impl Vm {
+    pub fn input(&self) -> bool {
+        self.input.unwrap_or(self.gui)
+    }
 }
 
 fn default_cpus() -> u32 {
@@ -86,6 +100,74 @@ pub struct Provision {
     /// Commands run as the guest user in the synced directory.
     #[serde(default)]
     pub run: Vec<String>,
+}
+
+/// Settings for `vm.gui`. Every field has a default, so `gui = true` on
+/// its own gives a sway desktop in a window.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Gui {
+    #[serde(default)]
+    pub desktop: Desktop,
+    /// Command run as the guest user once the desktop is up, on every boot.
+    /// Defaults to a terminal on the sway desktop; `""` runs nothing.
+    pub start: Option<String>,
+    /// Port the guest's VNC server listens on.
+    #[serde(default = "default_vnc")]
+    pub vnc: u16,
+    /// Host port forwarded to `vnc`; a free one is picked when unset.
+    pub port: Option<u16>,
+    /// Open a viewer window when `bsdt up` finishes.
+    #[serde(default = "default_true")]
+    pub open: bool,
+    #[serde(default = "default_resolution")]
+    pub resolution: String,
+}
+
+impl Default for Gui {
+    fn default() -> Self {
+        Gui {
+            desktop: Desktop::default(),
+            start: None,
+            vnc: default_vnc(),
+            port: None,
+            open: true,
+            resolution: default_resolution(),
+        }
+    }
+}
+
+impl Gui {
+    pub fn start(&self) -> Option<&str> {
+        match (&self.start, self.desktop) {
+            (Some(cmd), _) => Some(cmd.as_str()).filter(|c| !c.trim().is_empty()),
+            (None, Desktop::Sway) => Some("foot"),
+            (None, Desktop::None) => None,
+        }
+    }
+}
+
+fn default_vnc() -> u16 {
+    5900
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_resolution() -> String {
+    "1280x800".into()
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Desktop {
+    /// sway on a headless output, shared over VNC by wayvnc, all installed
+    /// and started by bsdt.
+    #[default]
+    Sway,
+    /// Nothing; `start` brings up whatever serves VNC on `vnc`.
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -288,6 +370,7 @@ version = "15.1"
 # filesystem = "ufs"    # ufs or zfs
 # ports = ["8080:80"]   # 127.0.0.1:HOST on the host -> GUEST in the VM
 # update = false        # install OS security updates on first boot
+# gui = false           # a sway desktop in a window; see [gui] in bsdt(1)
 
 [packages]
 install = ["git"]
@@ -334,6 +417,29 @@ mod tests {
         assert_eq!(config.vm.filesystem, Filesystem::Zfs);
         assert_eq!(config.vm.ports, [Port { host: 8080, guest: 80 }, Port { host: 5432, guest: 5432 }]);
         assert_eq!(config.provision.run, ["make"]);
+    }
+
+    #[test]
+    fn gui_defaults() {
+        let config: Config = toml::from_str("[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ngui = true").unwrap();
+        assert!(config.vm.input());
+        assert_eq!(config.gui.desktop, Desktop::Sway);
+        assert_eq!(config.gui.vnc, 5900);
+        assert_eq!(config.gui.port, None);
+        assert!(config.gui.open);
+        assert_eq!(config.gui.start(), Some("foot"));
+
+        let config: Config = toml::from_str(
+            "[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ngui = true\ninput = false\n[gui]\ndesktop = \"none\"\nstart = \"x11vnc\"\nport = 5901",
+        )
+        .unwrap();
+        assert!(!config.vm.input());
+        assert_eq!(config.gui.start(), Some("x11vnc"));
+        assert_eq!(config.gui.port, Some(5901));
+
+        let config: Config = toml::from_str("[vm]\nos = \"freebsd\"\nversion = \"15.1\"\ninput = true\n[gui]\nstart = \"\"").unwrap();
+        assert!(config.vm.input() && !config.vm.gui);
+        assert_eq!(config.gui.start(), None);
     }
 
     #[test]

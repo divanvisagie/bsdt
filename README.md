@@ -26,6 +26,10 @@ bsdt sync                  # copy the project into the guest
 bsdt provision             # reinstall packages and rerun provision commands
 bsdt status                # is it running, and on which ports
 bsdt logs [-F]             # the guest's serial console
+
+bsdt gui                   # reopen the desktop window (gui = true)
+bsdt key super+return      # press keys on the VM's keyboard
+bsdt type --enter 'ls'     # type text on it
 bsdt down                  # shut down, keeping the disk
 bsdt destroy               # delete the VM's disk and state
 
@@ -64,11 +68,37 @@ Only `vm.os` and `vm.version` are required. The man page documents every
 key. Use `-f other.toml` to give one project several VMs, for example a
 second one on an older release.
 
+## Desktop
+
+```toml
+[vm]
+os = "freebsd"
+version = "15.1"
+gui = true
+```
+
+is enough for a sway desktop in a window. The first `bsdt up` installs
+sway, seatd, wayvnc and the foot terminal, and every `up` starts them and
+opens a VNC viewer on the host. Every setting under `[gui]` has a default;
+see the man page to use your own desktop, port or resolution.
+
+FreeBSD has no driver for QEMU's virtual graphics cards, so sway draws to
+a headless output in software and wayvnc shares it. Input comes from the
+VM's emulated USB keyboard and tablet through `/dev/input`, so
+`bsdt key` and `bsdt type` can drive the desktop from scripts, and tools
+that read input devices directly see those keys. `input = true` gives you
+the keyboard and tablet without a desktop.
+
+On Linux, install a VNC viewer such as TigerVNC (`apt install
+tigervnc-viewer`). On macOS, bsdt uses TigerVNC Viewer if it is installed
+(`brew install --cask tigervnc-viewer`) and Screen Sharing otherwise.
+
 ## Requirements
 
 - QEMU: `qemu-system-x86_64` or `qemu-system-aarch64` (plus UEFI firmware
   for aarch64), and `qemu-img`
 - `ssh`, `ssh-keygen`, `rsync` and `curl`
+- For `gui = true`, a VNC viewer
 
 Guests that match the host architecture use KVM on Linux and the
 Hypervisor framework on macOS, so an Apple Silicon Mac gets a fast aarch64
@@ -112,8 +142,9 @@ Run `make` to list the targets: `build`, `install`, `test`, `lint`,
 
 To try a change against a real VM, `make try` builds a debug binary and
 boots [`examples/hello-c`](examples/hello-c), a C program that needs
-nothing installed. `make try EXAMPLE=hello-rust` boots
-[`examples/hello-rust`](examples/hello-rust) instead. `make try-down` and
+nothing installed. `EXAMPLE=hello-rust` boots
+[`examples/hello-rust`](examples/hello-rust) instead, and `EXAMPLE=gui`
+boots [`examples/gui`](examples/gui), a sway desktop. `make try-down` and
 `make try-destroy` stop and delete the VM. [TESTING.md](TESTING.md) is the
 checklist to run by hand before merging `develop` into `master`.
 

@@ -1,5 +1,7 @@
 mod config;
+mod gui;
 mod image;
+mod keys;
 mod os;
 mod qemu;
 mod seed;
@@ -13,7 +15,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
-use config::{DEFAULT_FILE, Project};
+use config::{DEFAULT_FILE, Desktop, Project};
 use qemu::Accel;
 use ssh::{Ssh, User};
 
@@ -64,6 +66,21 @@ enum Command {
     Sync,
     /// Install packages and run the provision commands again.
     Provision,
+    /// Open a viewer window on the VM's desktop (needs gui = true).
+    Gui,
+    /// Press keys on the VM's keyboard, e.g. super+return; each argument is
+    /// one chord, pressed in turn.
+    Key {
+        #[arg(required = true)]
+        chords: Vec<String>,
+    },
+    /// Type text on the VM's keyboard (US layout).
+    Type {
+        text: String,
+        /// Press Return afterwards.
+        #[arg(long)]
+        enter: bool,
+    },
     /// Print the VM's serial console log.
     Logs {
         /// Keep printing as the log grows.
@@ -87,10 +104,15 @@ const MAN_PAGE: &str = include_str!("../man/bsdt.1");
 
 /// What `bsdt up` records about the running VM in `state.json`.
 #[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
 struct State {
     ssh_port: u16,
     qmp_port: u16,
+    /// Host port forwarded to the guest's VNC server; 0 without gui.
+    gui_port: u16,
     provisioned: bool,
+    /// The default desktop's packages and seatd are set up.
+    desktop_ready: bool,
 }
 
 /// Files under the project's state directory.
@@ -170,10 +192,17 @@ fn cmd_up(project: &Project) -> Result<()> {
         qemu::create_overlay(&base, &paths.disk, &vm.disk)?;
         seed::write(&paths.seed, &project.hostname(), &public_key, vm.update)?;
         state.provisioned = false;
+        state.desktop_ready = false;
     }
 
     state.ssh_port = qemu::free_port()?;
     state.qmp_port = qemu::free_port()?;
+    let gui = &project.config.gui;
+    state.gui_port = match (vm.gui, gui.port) {
+        (false, _) => 0,
+        (true, Some(port)) => port,
+        (true, None) => qemu::free_port()?,
+    };
     paths.save_state(&state)?;
     let arch = vm.arch.resolve();
     let accel = qemu::start(&qemu::Launch {
@@ -185,6 +214,8 @@ fn cmd_up(project: &Project) -> Result<()> {
         ssh_port: state.ssh_port,
         qmp_port: state.qmp_port,
         ports: &vm.ports,
+        vnc: vm.gui.then_some((state.gui_port, gui.vnc)),
+        input: vm.input(),
         console: &paths.console,
         pidfile: &paths.pidfile,
     })?;
@@ -199,16 +230,53 @@ fn cmd_up(project: &Project) -> Result<()> {
     if !state.provisioned {
         provision(project, &paths, &state)?;
         state.provisioned = true;
+        state.desktop_ready = vm.gui && project.config.gui.desktop == Desktop::Sway;
         paths.save_state(&state)?;
     } else {
         sync(project, &paths, &state)?;
+    }
+    if vm.gui {
+        if gui.desktop == Desktop::Sway && !state.desktop_ready {
+            setup_desktop(project, &paths, &state)?;
+            state.desktop_ready = true;
+            paths.save_state(&state)?;
+        }
+        eprintln!("bsdt: starting the desktop");
+        paths.ssh(&state).script(User::Guest, &gui::start_script(gui, &project.dest()))?;
+        gui::wait_vnc(state.gui_port, Duration::from_secs(60))?;
     }
 
     println!("ready: {} {} at {}", vm.os, vm.version, project.dest());
     println!("  ssh      bsdt ssh");
     println!("  run      bsdt exec -- <command>");
+    if vm.gui {
+        println!("  gui      bsdt gui (vnc://127.0.0.1:{})", state.gui_port);
+    }
     for port in &vm.ports {
         println!("  port     {port}");
+    }
+    if vm.gui && gui.open {
+        open_viewer(state.gui_port)?;
+    }
+    Ok(())
+}
+
+/// Install and configure the default sway desktop.
+fn setup_desktop(project: &Project, paths: &Paths, state: &State) -> Result<()> {
+    let ssh = paths.ssh(state);
+    let packages: Vec<String> = gui::SWAY_PACKAGES.iter().map(|p| p.to_string()).collect();
+    eprintln!("bsdt: installing the desktop");
+    ssh.run_checked(User::Root, &os::install_packages(project.config.vm.os, &packages))?;
+    ssh.script(User::Root, &gui::sway_root_setup())
+}
+
+fn open_viewer(port: u16) -> Result<()> {
+    match gui::open_viewer(port)? {
+        Some(viewer) => eprintln!("bsdt: opened the desktop in {viewer}"),
+        None => eprintln!(
+            "bsdt: no VNC viewer found; install one (e.g. TigerVNC: apt install tigervnc-viewer) \
+             or connect yours to 127.0.0.1:{port}"
+        ),
     }
     Ok(())
 }
@@ -260,6 +328,9 @@ fn provision(project: &Project, paths: &Paths, state: &State) -> Result<()> {
     eprintln!("bsdt: installing packages");
     ssh.run_checked(User::Root, &os::install_packages(config.vm.os, &config.packages.install))?;
     sync(project, paths, state)?;
+    if config.vm.gui && config.gui.desktop == Desktop::Sway {
+        setup_desktop(project, paths, state)?;
+    }
     for cmd in &config.provision.root {
         eprintln!("bsdt: [root] {cmd}");
         ssh.run_checked(User::Root, cmd)?;
@@ -317,6 +388,9 @@ fn cmd_status(project: &Project) -> Result<()> {
     if qemu::running_pid(&paths.pidfile).is_some() {
         let state = paths.load_state();
         println!("ssh       127.0.0.1:{}", state.ssh_port);
+        if state.gui_port != 0 {
+            println!("gui       vnc://127.0.0.1:{}", state.gui_port);
+        }
         for port in &vm.ports {
             println!("port      {port}");
         }
@@ -339,6 +413,37 @@ fn cmd_exec(project: &Project, root: bool, no_sync: bool, command: &[String]) ->
     let args: Vec<String> = command.iter().map(|a| ssh::quote(a)).collect();
     let script = format!("cd {} && {}", ssh::quote(&project.guest_cwd()), args.join(" "));
     Ok(paths.ssh(&state).run(user, &script)?.code().unwrap_or(1))
+}
+
+fn cmd_gui(project: &Project) -> Result<()> {
+    let (_, state) = running(project)?;
+    if state.gui_port == 0 {
+        bail!("this VM has no desktop; set gui = true under [vm] and run `bsdt down && bsdt up`");
+    }
+    open_viewer(state.gui_port)
+}
+
+fn cmd_key(project: &Project, chords: &[String]) -> Result<()> {
+    let chords = chords.iter().map(|c| keys::chord(c)).collect::<Result<Vec<_>>>()?;
+    send_keys(project, &chords)
+}
+
+fn cmd_type(project: &Project, text: &str, enter: bool) -> Result<()> {
+    let mut chords = keys::text(text)?;
+    if enter {
+        chords.push(vec!["ret".into()]);
+    }
+    send_keys(project, &chords)
+}
+
+fn send_keys(project: &Project, chords: &[Vec<String>]) -> Result<()> {
+    let (_, state) = running(project)?;
+    let mut qmp = qemu::Qmp::connect(state.qmp_port)?;
+    for chord in chords {
+        let codes: Vec<&str> = chord.iter().map(String::as_str).collect();
+        qmp.chord(&codes)?;
+    }
+    Ok(())
 }
 
 fn cmd_logs(project: &Project, follow: bool) -> Result<()> {
@@ -412,6 +517,9 @@ fn main() -> Result<()> {
             let (paths, state) = running(&project)?;
             provision(&project, &paths, &state)
         }
+        Command::Gui => cmd_gui(&project),
+        Command::Key { chords } => cmd_key(&project, chords),
+        Command::Type { text, enter } => cmd_type(&project, text, *enter),
         Command::Logs { follow } => cmd_logs(&project, *follow),
         Command::Pull => {
             let path = image::ensure(&os::image(&project.config.vm)?)?;
