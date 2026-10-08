@@ -20,13 +20,24 @@ use crate::ssh::quote;
 /// Packages the sway desktop needs, beyond what the user lists.
 pub const SWAY_PACKAGES: &[&str] = &["sway", "seatd", "wayvnc", "foot", "dejavu"];
 
-/// Root setup for the sway desktop: seatd hands sway the input devices,
-/// and only members of `video` may talk to it.
+/// Root setup for the sway desktop, safe to run on every boot: seatd hands
+/// sway the input devices, and only members of `video` may talk to it.
+///
+/// seatd normally ties its seat to a virtual terminal, which it opens as
+/// /dev/ttyv*. Guests without a display, such as aarch64 ones on QEMU's
+/// `virt` machine, have none, so the session never becomes active and
+/// sway gives up. A desktop on a headless output has no use for VTs, so
+/// seatd runs with a seat that isn't bound to one.
 pub fn sway_root_setup() -> String {
     format!(
-        "sysrc seatd_enable=YES >/dev/null && \
-         (service seatd status >/dev/null 2>&1 || service seatd start >/dev/null 2>&1 </dev/null) && \
-         pw groupmod video -m {GUEST_USER}"
+        r#"sysrc seatd_enable=YES >/dev/null
+if [ "$(sysrc -n seatd_env 2>/dev/null)" != "SEATD_VTBOUND=0" ]; then
+    sysrc seatd_env="SEATD_VTBOUND=0" >/dev/null
+    service seatd restart >/dev/null 2>&1 </dev/null
+fi
+service seatd status >/dev/null 2>&1 || service seatd start >/dev/null 2>&1 </dev/null
+pw groupmod video -m {GUEST_USER}
+"#
     )
 }
 

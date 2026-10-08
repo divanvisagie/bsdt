@@ -240,10 +240,15 @@ fn cmd_up(project: &Project) -> Result<()> {
         sync(project, &paths, &state)?;
     }
     if vm.gui {
-        if gui.desktop == Desktop::Sway && !state.desktop_ready {
-            setup_desktop(project, &paths, &state)?;
-            state.desktop_ready = true;
-            paths.save_state(&state)?;
+        if gui.desktop == Desktop::Sway {
+            if !state.desktop_ready {
+                setup_desktop(project, &paths, &state)?;
+                state.desktop_ready = true;
+                paths.save_state(&state)?;
+            }
+            // Cheap and idempotent, and VMs set up by older versions of
+            // bsdt need its seatd settings too.
+            paths.ssh(&state).script(User::Root, &gui::sway_root_setup())?;
         }
         eprintln!("bsdt: starting the desktop");
         paths.ssh(&state).script(User::Guest, &gui::start_script(gui, &project.dest()))?;
