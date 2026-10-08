@@ -130,7 +130,8 @@ Viewer and the built-in Screen Sharing). Then:
 19. `make try EXAMPLE=gui`
     - About a minute and a half the first time while the desktop installs.
     - `ready` lists a `gui` line, and a viewer window opens on a sway
-      desktop with a foot terminal in `/home/bsdt/gui`.
+      desktop. The first terminal shows fastfetch, then a shell in
+      `/home/bsdt/gui`.
     - On macOS, note whether Screen Sharing connects. wayvnc has no
       password, which it may refuse.
 20. Type into foot in the viewer window, and press alt+return there.

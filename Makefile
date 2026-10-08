@@ -42,12 +42,8 @@ try-down: ## Shut down the example VM, keeping its disk
 try-destroy: ## Delete the example VM so the next try starts fresh
 	cd examples/$(EXAMPLE) && $(BSDT) destroy
 
-docs: docs/index.html ## Render the man page to docs/index.html (needs mandoc)
-
-docs/index.html: man/bsdt.1
-	@command -v mandoc >/dev/null || { echo "mandoc not found — install it (e.g. apt install mandoc)"; exit 1; }
-	mandoc -T lint -W warning $<
-	mandoc -T html -O 'style=style.css,man=https://man.freebsd.org/cgi/man.cgi?query=%N&sektion=%S' $< > $@
+docs: ## Rebuild the docs site in docs/ from templates/ and the man page (needs mandoc)
+	./scripts/generate_docs.sh
 
 publish-check: ## Verify the crate can be published (on master, clean, pushed, dry run passes)
 	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \

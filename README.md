@@ -132,10 +132,11 @@ there automatically for anything in `~/.cargo/bin` on your `PATH`, so
 steps. The page's source is [`man/bsdt.1`](man/bsdt.1), written by hand in
 mdoc. A test checks that it mentions every subcommand and flag.
 
-[`docs/index.html`](docs/index.html) is the same page rendered to HTML for
-the web. Regenerate it with `make docs` (needs
-[mandoc](https://mandoc.bsd.lv)) after editing the man page, and commit
-the result.
+The project website lives in [`docs/`](docs/) and is served by GitHub
+Pages. `make docs` rebuilds it (needs [mandoc](https://mandoc.bsd.lv)):
+the home page comes from [`templates/index.html`](templates/index.html),
+and the manual page and license are rendered into the same layout. Run it
+after editing the man page or templates, and commit the result.
 
 ## Development
 

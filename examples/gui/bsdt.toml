@@ -6,3 +6,10 @@
 os = "freebsd"
 version = "15.1"
 gui = true
+
+[packages]
+install = ["fastfetch"]
+
+[gui]
+# The first terminal shows fastfetch, then leaves you at a shell.
+start = "foot sh -c 'fastfetch; exec sh'"
