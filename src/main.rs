@@ -283,6 +283,10 @@ fn setup_desktop(project: &Project, paths: &Paths, state: &State) -> Result<()> 
 fn open_viewer(port: u16, fullscreen: bool) -> Result<()> {
     match gui::open_viewer(port, fullscreen)? {
         Some(viewer) => eprintln!("bsdt: opened the desktop in {viewer}"),
+        None if cfg!(target_os = "macos") => eprintln!(
+            "bsdt: TigerVNC not found; install it with `brew install --cask tigervnc-viewer` \
+             (Screen Sharing can't connect: it requires a password), then run `bsdt gui`"
+        ),
         None => eprintln!(
             "bsdt: no VNC viewer found; install one (e.g. TigerVNC: apt install tigervnc-viewer) \
              or connect yours to 127.0.0.1:{port}"

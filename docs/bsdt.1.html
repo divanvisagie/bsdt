@@ -372,9 +372,10 @@
     &#x2018;<code class="Li">video</code>&#x2019; group. Every
     <code class="Cm">up</code> then starts sway, wayvnc and
     <code class="Ic">gui.start</code>, waits for the VNC server to answer, and
-    opens a viewer on the forwarded port. On macOS that is the TigerVNC viewer
-    if it is installed, and otherwise Screen Sharing. On other systems it is the
-    first of
+    opens a viewer on the forwarded port. On macOS that is always the TigerVNC
+    viewer (&#x2018;<code class="Li">brew install --cask
+    tigervnc-viewer</code>&#x2019;), since the built-in Screen Sharing requires
+    a password and the desktop has none. On other systems it is the first of
     <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=vncviewer&amp;sektion=1">vncviewer(1)</a>,
     <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=xtigervncviewer&amp;sektion=1">xtigervncviewer(1)</a>,
     <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=remmina&amp;sektion=1">remmina(1)</a>

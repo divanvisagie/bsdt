@@ -418,8 +418,10 @@ then starts sway, wayvnc and
 .Ic gui.start ,
 waits for the VNC server to answer, and opens a viewer on the forwarded
 port.
-On macOS that is the TigerVNC viewer if it is installed, and otherwise
-Screen Sharing.
+On macOS that is always the TigerVNC viewer
+.Pq Ql brew install --cask tigervnc-viewer ,
+since the built-in Screen Sharing requires a password and the desktop has
+none.
 On other systems it is the first of
 .Xr vncviewer 1 ,
 .Xr xtigervncviewer 1 ,

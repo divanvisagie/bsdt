@@ -124,16 +124,16 @@ under each step.
 
 ### Desktop
 
-Install a VNC viewer first (TigerVNC on Linux; on macOS try both TigerVNC
-Viewer and the built-in Screen Sharing). Then:
+Install TigerVNC first (`apt install tigervnc-viewer`, or
+`brew install --cask tigervnc-viewer` on macOS). Then:
 
 19. `make try EXAMPLE=gui`
     - About a minute and a half the first time while the desktop installs.
     - `ready` lists a `gui` line, and a viewer window opens on a sway
       desktop. The first terminal shows fastfetch, then a shell in
       `/home/bsdt/gui`.
-    - On macOS, note whether Screen Sharing connects. wayvnc has no
-      password, which it may refuse.
+    - On macOS without TigerVNC installed, `up` says to install it rather
+      than opening Screen Sharing.
 20. Type into foot in the viewer window, and press alt+return there.
     - The text appears, and a second terminal opens.
 21. From `examples/gui`: `bsdt type --enter 'echo "typed by bsdt: A_b-C!"'`

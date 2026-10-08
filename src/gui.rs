@@ -136,14 +136,15 @@ pub fn open_viewer(port: u16, fullscreen: bool) -> Result<Option<String>> {
     tiger.push(format!("127.0.0.1::{port}"));
 
     if cfg!(target_os = "macos") {
-        // Prefer TigerVNC when installed: Screen Sharing insists on
-        // authentication, which wayvnc does not offer without TLS.
-        if let Some(app) = macos_app("TigerVNC Viewer") {
-            spawn(Command::new("open").arg("-a").arg(&app).arg("--args").args(&tiger))?;
-            return Ok(Some(app.display().to_string()));
-        }
-        spawn(Command::new("open").arg(&url))?;
-        return Ok(Some("Screen Sharing".into()));
+        // TigerVNC only. Screen Sharing, which would otherwise open vnc://
+        // links, insists on a password, and the desktop has none.
+        return match macos_app("TigerVNC") {
+            Some(app) => {
+                spawn(Command::new("open").arg("-a").arg(&app).arg("--args").args(&tiger))?;
+                Ok(Some(app.display().to_string()))
+            }
+            None => Ok(None),
+        };
     }
 
     let viewers: [(&str, Vec<String>); 4] = [

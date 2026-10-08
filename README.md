@@ -94,8 +94,9 @@ that read input devices directly see those keys. `input = true` gives you
 the keyboard and tablet without a desktop.
 
 On Linux, install a VNC viewer such as TigerVNC (`apt install
-tigervnc-viewer`). On macOS, bsdt uses TigerVNC Viewer if it is installed
-(`brew install --cask tigervnc-viewer`) and Screen Sharing otherwise.
+tigervnc-viewer`). On macOS, bsdt opens TigerVNC Viewer
+(`brew install --cask tigervnc-viewer`). The built-in Screen Sharing can't
+connect, because it requires a password and the desktop has none.
 
 ## Requirements
 
