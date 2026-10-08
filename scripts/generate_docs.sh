@@ -2,7 +2,7 @@
 # Build the docs site in docs/ (served by GitHub Pages) from templates/,
 # the man page and the license. Needs mandoc. Run it through `make docs`.
 #
-#   templates/page.html   the page skeleton: {{TITLE}}, {{CLASS}}, {{NAV}}, {{CONTENT}}
+#   templates/page.html   the page skeleton: {{TITLE}}, {{CLASS}}, {{URL}}, {{NAV}}, {{CONTENT}}
 #   templates/nav.html    the nav bar shared by every page
 #   templates/index.html  the home page content, written by hand
 #
@@ -22,12 +22,17 @@ command -v mandoc >/dev/null || {
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# The site's public address, for canonical and link-preview URLs.
+SITE=https://bsdt.divanv.com
+
 # render TITLE CLASS CONTENT_FILE OUTPUT
 render() {
-    awk -v title="$1" -v class="$2" -v nav="$TEMPLATES/nav.html" -v content="$3" '
+    page=$(basename "$4")
+    [ "$page" = index.html ] && page=
+    awk -v title="$1" -v class="$2" -v url="$SITE/$page" -v nav="$TEMPLATES/nav.html" -v content="$3" '
         /\{\{NAV\}\}/ { while ((getline line < nav) > 0) print line; close(nav); next }
         /\{\{CONTENT\}\}/ { while ((getline line < content) > 0) print line; close(content); next }
-        { gsub(/\{\{TITLE\}\}/, title); gsub(/\{\{CLASS\}\}/, class); print }
+        { gsub(/\{\{TITLE\}\}/, title); gsub(/\{\{CLASS\}\}/, class); gsub(/\{\{URL\}\}/, url); print }
     ' "$TEMPLATES/page.html" > "$4"
     echo "wrote $4"
 }
