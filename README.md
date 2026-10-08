@@ -5,6 +5,8 @@ FreeBSD targets from Linux or macOS. It aims for the same feel as
 `docker compose up`: describe the environment in `bsdt.toml`, run
 `bsdt up`, and get the same machine every time.
 
+Website, install guide and manual: <https://bsdt.divanv.com>
+
 bsdt boots the official FreeBSD `BASIC-CLOUDINIT` VM image with QEMU.
 The image is downloaded once, checked against the release's
 `CHECKSUM.SHA256`, and cached. Each project gets a copy-on-write overlay
