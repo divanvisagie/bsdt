@@ -150,23 +150,35 @@ Install TigerVNC first (`apt install tigervnc-viewer`, or
       reinstalling anything.
 26. `make try-destroy EXAMPLE=gui`
 
+### Audio
+
+The gui example also has `audio = true`. Turn the host's volume down
+first.
+
+27. `make try EXAMPLE=gui`, then from `examples/gui`:
+    `bsdt exec -- cat /dev/sndstat`
+    - Lists `pcm0` with `(play) default`.
+28. `bsdt exec -- beep`
+    - A short tone plays on the host.
+29. `make try-destroy EXAMPLE=gui`
+
 ### Errors
 
 From an empty temporary directory:
 
-27. `bsdt status`
+30. `bsdt status`
     - `no bsdt.toml in … or its parents (run bsdt init to create one)`.
-28. `bsdt init && bsdt init`
+31. `bsdt init && bsdt init`
     - `wrote bsdt.toml`, then `bsdt.toml already exists`.
-29. Set `version = "13.9"`, then `bsdt pull`
+32. Set `version = "13.9"`, then `bsdt pull`
     - Fails with a 404 on `CHECKSUM.SHA256` and suggests checking the
       version.
-30. Set `os = "openbsd"`, then `bsdt up`
+33. Set `os = "openbsd"`, then `bsdt up`
     - `openbsd guests are planned but not supported yet`.
 
 ### Man page
 
-31. `bsdt man | man -l -` (`mandoc -a` on macOS: `bsdt man | mandoc -a`)
+34. `bsdt man | man -l -` (`mandoc -a` on macOS: `bsdt man | mandoc -a`)
     - The page renders, with every command listed.
 
 ## Platform notes
@@ -176,8 +188,8 @@ From an empty temporary directory:
   the `kvm` group to fix it.
 - **Apple Silicon**: guests default to aarch64 and use HVF. This has not
   been tested yet, so watch for problems finding the UEFI firmware and
-  booting, and report what `bsdt logs` shows. The desktop (steps 19 to
-  26) is untested there too.
+  booting, and report what `bsdt logs` shows. The desktop and audio (steps 19 to
+  29) are untested there too, including the Core Audio backend.
 - **`arch = "amd64"` on Apple Silicon, or `aarch64` on an x86 host**: works
   through emulation, but expect first boot to take several minutes.
 

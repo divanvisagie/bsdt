@@ -257,6 +257,14 @@
   <dt id="gui~2"><a class="permalink" href="#gui~2"><code class="Ic">gui</code></a></dt>
   <dd>When true, run a desktop in the guest and open a window on it; see
       <a class="Sx" href="#DESKTOP">DESKTOP</a>. Defaults to false.</dd>
+  <dt id="audio"><a class="permalink" href="#audio"><code class="Ic">audio</code></a></dt>
+  <dd>When true, give the guest an Intel HDA sound card that plays through the
+      host's sound server, and load
+      <a class="Xr" href="https://man.freebsd.org/cgi/man.cgi?query=snd_hda&amp;sektion=4">snd_hda(4)</a>
+      for it on every boot, so it appears as <span class="Pa">/dev/dsp</span>.
+      <code class="Nm">bsdt</code> uses the best audio backend QEMU was built
+      with: PipeWire, PulseAudio, ALSA, SDL or OSS on Linux, and Core Audio or
+      SDL on macOS. There is no microphone. Defaults to false.</dd>
   <dt id="input"><a class="permalink" href="#input"><code class="Ic">input</code></a></dt>
   <dd>When true, attach a USB keyboard and tablet, which the guest sees as evdev
       devices in <span class="Pa">/dev/input</span>, and which
@@ -528,6 +536,10 @@ $ bsdt man | man -l -</pre>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="CAVEATS"><a class="permalink" href="#CAVEATS">CAVEATS</a></h1>
+<p class="Pp">Programs that use ALSA, rather than FreeBSD's own OSS interface,
+    need the
+    <a class="permalink" href="#alsa-plugins"><b class="Sy" id="alsa-plugins">alsa-plugins</b></a>
+    package to reach the sound card.</p>
 <p class="Pp">The desktop's VNC server has no password. Like SSH, it is only
     reachable through a port bound to 127.0.0.1 on the host.</p>
 <p class="Pp">The guest's root account has no password on the serial console, as

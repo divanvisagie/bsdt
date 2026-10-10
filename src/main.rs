@@ -209,6 +209,7 @@ fn cmd_up(project: &Project) -> Result<()> {
     };
     paths.save_state(&state)?;
     let arch = vm.arch.resolve();
+    let audio = if vm.audio { Some(qemu::audio_backend(qemu::binary(arch))?) } else { None };
     let accel = qemu::start(&qemu::Launch {
         arch,
         cpus: vm.cpus,
@@ -220,6 +221,7 @@ fn cmd_up(project: &Project) -> Result<()> {
         ports: &vm.ports,
         vnc: vm.gui.then_some((state.gui_port, gui.vnc)),
         input: vm.input(),
+        audio: audio.as_deref(),
         console: &paths.console,
         pidfile: &paths.pidfile,
     })?;
@@ -238,6 +240,9 @@ fn cmd_up(project: &Project) -> Result<()> {
         paths.save_state(&state)?;
     } else {
         sync(project, &paths, &state)?;
+    }
+    if vm.audio {
+        paths.ssh(&state).script(User::Root, os::AUDIO_SETUP)?;
     }
     if vm.gui {
         if gui.desktop == Desktop::Sway {

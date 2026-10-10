@@ -259,6 +259,17 @@ Only read when the disk is created.
 When true, run a desktop in the guest and open a window on it; see
 .Sx DESKTOP .
 Defaults to false.
+.It Ic audio
+When true, give the guest an Intel HDA sound card that plays through the
+host's sound server, and load
+.Xr snd_hda 4
+for it on every boot, so it appears as
+.Pa /dev/dsp .
+.Nm
+uses the best audio backend QEMU was built with: PipeWire, PulseAudio,
+ALSA, SDL or OSS on Linux, and Core Audio or SDL on macOS.
+There is no microphone.
+Defaults to false.
 .It Ic input
 When true, attach a USB keyboard and tablet, which the guest sees as
 evdev devices in
@@ -607,6 +618,10 @@ $ bsdt man | man -l -
 .Sh AUTHORS
 .An Divan Visagie Aq Mt me@divanv.com
 .Sh CAVEATS
+Programs that use ALSA, rather than FreeBSD's own OSS interface, need the
+.Sy alsa-plugins
+package to reach the sound card.
+.Pp
 The desktop's VNC server has no password.
 Like SSH, it is only reachable through a port bound to 127.0.0.1 on the
 host.

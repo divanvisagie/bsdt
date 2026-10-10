@@ -51,6 +51,9 @@ pub struct Vm {
     /// Run a desktop in the guest and open a window on it; see [`Gui`].
     #[serde(default)]
     pub gui: bool,
+    /// Give the guest a sound card that plays through the host's audio.
+    #[serde(default)]
+    pub audio: bool,
     /// Attach a USB keyboard and tablet, for `bsdt key` and anything that
     /// reads /dev/input. Defaults to on when `gui` is.
     pub input: Option<bool>,
@@ -407,6 +410,7 @@ version = "15.1"
 # filesystem = "ufs"    # ufs or zfs
 # ports = ["8080:80"]   # 127.0.0.1:HOST on the host -> GUEST in the VM
 # update = false        # install OS security updates on first boot
+# audio = false         # a sound card that plays on the host
 # gui = false           # a sway desktop in a window; see [gui] in bsdt(1)
 
 [packages]

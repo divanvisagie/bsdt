@@ -23,6 +23,8 @@ pub struct Launch<'a> {
     pub vnc: Option<(u16, u16)>,
     /// Attach a USB keyboard and tablet.
     pub input: bool,
+    /// QEMU audio backend for an HDA sound card, when `audio` is on.
+    pub audio: Option<&'a str>,
     pub console: &'a Path,
     pub pidfile: &'a Path,
 }
@@ -62,10 +64,8 @@ pub fn create_overlay(base: &Path, overlay: &Path, size: &str) -> Result<()> {
 
 pub fn start(l: &Launch) -> Result<Accel> {
     let accel = accel(l.arch);
-    let (binary, machine) = match l.arch {
-        Arch::Aarch64 => ("qemu-system-aarch64", "virt"),
-        _ => ("qemu-system-x86_64", "q35"),
-    };
+    let binary = binary(l.arch);
+    let machine = if l.arch == Arch::Aarch64 { "virt" } else { "q35" };
     let cpu = match accel {
         Accel::Kvm | Accel::Hvf => "host",
         Accel::Tcg => "max",
@@ -105,6 +105,11 @@ pub fn start(l: &Launch) -> Result<Accel> {
         // so the devices show up in /dev/input for libinput.
         cmd.args(["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]);
     }
+    if let Some(backend) = l.audio {
+        // FreeBSD's snd_hda drives Intel HDA on both amd64 and aarch64.
+        cmd.args(["-audiodev", &format!("{backend},id=snd0")])
+            .args(["-device", "intel-hda", "-device", "hda-output,audiodev=snd0"]);
+    }
     if l.arch == Arch::Aarch64 {
         cmd.arg("-bios").arg(aarch64_firmware(binary)?);
     }
@@ -114,6 +119,33 @@ pub fn start(l: &Launch) -> Result<Accel> {
         bail!("{binary} failed to start: {}", String::from_utf8_lossy(&output.stderr).trim());
     }
     Ok(accel)
+}
+
+pub fn binary(arch: Arch) -> &'static str {
+    match arch {
+        Arch::Aarch64 => "qemu-system-aarch64",
+        _ => "qemu-system-x86_64",
+    }
+}
+
+/// The best audio backend `binary` was built with for this host, so the
+/// guest's sound reaches the host's sound server.
+pub fn audio_backend(binary: &str) -> Result<String> {
+    let output = Command::new(binary)
+        .args(["-audiodev", "help"])
+        .output()
+        .with_context(|| format!("running {binary} (is QEMU installed?)"))?;
+    let available = String::from_utf8_lossy(&output.stdout);
+    pick_audio_backend(&available).map(str::to_string).with_context(|| {
+        format!("{binary} has no audio backend for this host (install QEMU's audio modules, e.g. qemu-system-gui on Debian)")
+    })
+}
+
+fn pick_audio_backend(help: &str) -> Option<&'static str> {
+    let preferred: &[&'static str] =
+        if cfg!(target_os = "macos") { &["coreaudio", "sdl"] } else { &["pipewire", "pa", "alsa", "sdl", "oss"] };
+    let available: Vec<&str> = help.lines().map(str::trim).collect();
+    preferred.iter().copied().find(|b| available.contains(b))
 }
 
 fn drive(path: &Path, format: &str) -> String {
@@ -270,4 +302,21 @@ fn wait_exit(pidfile: &Path, timeout: Duration) -> bool {
         std::thread::sleep(Duration::from_millis(250));
     }
     running_pid(pidfile).is_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_the_preferred_audio_backend() {
+        let help = "Available audio drivers:\nnone\nalsa\noss\npa\nwav\n";
+        if cfg!(target_os = "macos") {
+            assert_eq!(pick_audio_backend(help), None);
+            assert_eq!(pick_audio_backend("none\ncoreaudio\n"), Some("coreaudio"));
+        } else {
+            assert_eq!(pick_audio_backend(help), Some("pa"));
+            assert_eq!(pick_audio_backend("none\nwav\n"), None);
+        }
+    }
 }

@@ -6,6 +6,7 @@
 os = "freebsd"
 version = "15.1"
 gui = true
+audio = true     # see Audio in TESTING.md
 
 [packages]
 install = ["fastfetch"]

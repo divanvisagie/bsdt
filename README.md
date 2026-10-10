@@ -54,6 +54,7 @@ version = "15.1"
 memory = "4G"
 ports = ["8080"]        # or "HOST:GUEST"; bound to 127.0.0.1
 # update = true        # install security updates on first boot (slower)
+# audio = true         # a sound card that plays on the host
 
 [packages]
 install = ["rust", "git"]
@@ -93,6 +94,10 @@ VM's emulated USB keyboard and tablet through `/dev/input`, so
 that read input devices directly see those keys. `input = true` gives you
 the keyboard and tablet without a desktop.
 
+`audio = true` under `[vm]` adds a sound card that plays through the
+host's sound server. It works with or without the desktop; programs that
+use ALSA rather than OSS also need the `alsa-plugins` package.
+
 On Linux, install a VNC viewer such as TigerVNC (`apt install
 tigervnc-viewer`). On macOS, bsdt opens TigerVNC Viewer
 (`brew install --cask tigervnc-viewer`). The built-in Screen Sharing can't
@@ -104,6 +109,8 @@ connect, because it requires a password and the desktop has none.
   for aarch64), and `qemu-img`
 - `ssh`, `ssh-keygen`, `rsync` and `curl`
 - For `gui = true`, a VNC viewer
+- For `audio = true`, a QEMU with an audio backend for your sound server
+  (on Debian and Ubuntu, `qemu-system-gui` adds PipeWire and PulseAudio)
 
 Guests that match the host architecture use KVM on Linux and the
 Hypervisor framework on macOS, so an Apple Silicon Mac gets a fast aarch64

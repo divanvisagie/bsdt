@@ -61,6 +61,11 @@ pub fn install_packages(os: Os, packages: &[String]) -> String {
     cmd
 }
 
+/// Root setup for `audio = true`, safe to run on every boot: load the
+/// driver for QEMU's Intel HDA card now and on later boots, so it shows up
+/// as /dev/dsp.
+pub const AUDIO_SETUP: &str = "kldload -n snd_hda\nsysrc -q kld_list+=snd_hda >/dev/null\n";
+
 #[cfg(test)]
 mod tests {
     use super::*;
